@@ -1,0 +1,25 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Secrets - real keys live in .env, only .env.example is committed
+.env
+
+# Data - too big for GitHub (pbp_features.csv alone is 108 MB).
+# README documents where to download the raw files; the processed file
+# is rebuilt with `python -m src.data.features`.
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Trained model binary - rebuilt with `python -m src.model.train`.
+# The evaluation charts (*.png) ARE committed so they show on GitHub.
+model/*.joblib
+
+# Editor / OS noise
+.vscode/
+.DS_Store
+Thumbs.db

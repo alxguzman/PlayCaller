@@ -1,0 +1,21 @@
+# --- Already installed in your venv (pinned to match) ---
+pandas==3.0.2
+numpy==2.4.4
+matplotlib==3.10.8
+seaborn==0.13.2
+ipykernel==7.2.0
+
+# --- Phase 2: modeling ---
+scikit-learn==1.7.2
+xgboost==3.1.2
+shap==0.52.0  # 0.48 can't read xgboost 3.1 model files
+joblib==1.5.2
+
+# --- Phase 3: API ---
+fastapi==0.121.0
+uvicorn==0.38.0
+pydantic==2.12.4
+
+# --- Phase 4: AI play caller ---
+anthropic==0.75.0
+python-dotenv==1.2.1
