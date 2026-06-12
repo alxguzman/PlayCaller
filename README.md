@@ -24,7 +24,9 @@ Built with: pandas · XGBoost · FastAPI · React · Claude API
 4. **AI play caller** *(Phase 4)* — Claude turns the numbers into a
    coordinator-style explanation: *"3rd & 7, their secondary has been
    leaking EPA for a month — air it out."*
-5. **Dashboard** *(Phase 5)* — React + Recharts frontend.
+5. **Dashboard** *(Phase 5)* — React frontend (`frontend/`): set the
+   situation, watch the formation diagram and ranked call sheet react
+   live. `npm run dev` in `frontend/` with the API running.
 
 ## How the recommender picks a play: floor and ceiling
 
@@ -141,4 +143,4 @@ uvicorn src.api.main:app --reload   # start the API, docs at /docs
 - [x] Phase 2 — XGBoost model + recommender (`src/model/`)
 - [x] Phase 3 — FastAPI backend (`src/api/`)
 - [ ] Phase 4 — Claude AI play caller (`src/ai/`)
-- [ ] Phase 5 — React dashboard (`frontend/`)
+- [x] Phase 5 — React dashboard (`frontend/`)

@@ -1,23 +1,42 @@
-# Frontend (Phase 5 — not built yet)
+# Frontend (Phase 5 — React dashboard)
 
-React dashboard that lets you set a game situation with sliders/dropdowns
-and shows the recommended play, success probabilities (Recharts bar chart),
-and Claude's natural-language explanation.
+A live play-calling dashboard: set the game situation on the left, and
+the model's recommendation, an interactive formation diagram, and the
+full ranked call sheet update as you type.
 
-## When you're ready to build it
+Built with Vite + React (no other runtime dependencies — the field is
+hand-rolled SVG, the bars/ring are CSS).
+
+## Run it
 
 ```powershell
-# From this frontend/ folder:
-npm create vite@latest . -- --template react
+# 1. Start the API from the repo root (it serves the model):
+uvicorn src.api.main:app --reload
+
+# 2. Start the dev server from this frontend/ folder:
 npm install
-npm install recharts
-npm run dev
+npm run dev      # opens on http://localhost:5173
 ```
 
-Then build:
-- `SituationForm` — down, distance, field position, quarter, clock, score, teams
-- `RecommendationCard` — RUN vs PASS with success probabilities
-- `ProbabilityChart` — Recharts `<BarChart>` comparing the two options
-- `CoachExplanation` — text from the `/recommend` endpoint's Claude output
+## What's where
 
-The API will run at http://localhost:8000 (see `src/api/main.py`).
+```
+src/
+├── api.js                      # fetch wrappers for GET /options, POST /recommend
+├── App.jsx                     # state + debounced re-recommend on every change
+├── lib/
+│   ├── labels.js               # display names for concepts/formations/personnel
+│   └── formations.js           # inputs -> 11v11 player coordinates + route art
+└── components/
+    ├── SituationPanel.jsx      # every /recommend input (teams, down, ..., risk dial)
+    ├── RecommendationCard.jsx  # best call, expected EPA, success-probability ring
+    ├── Field.jsx               # SVG field: LOS, 1st-down line, players, routes
+    ├── PlayComparison.jsx      # best pass vs best run, head to head
+    ├── CallSheet.jsx           # all concepts ranked by EPA, floor made visible
+    └── HistoryStrip.jsx        # saved recommendations (localStorage)
+```
+
+The field reacts to the inputs: formation moves the QB/backfield,
+personnel swaps TEs/WRs, defenders-in-box shifts the defense, and the
+ball spot/first-down marker follow the situation. Route arrows show the
+recommended concept.
