@@ -47,6 +47,11 @@ OUTCOME_COLS = [
     "run_location", "run_gap", "qb_scramble", "sack",
 ]
 
+QB_COLS = [
+    # Who dropped back, for the rolling QB-form features in features.py.
+    "passer_player_id", "passer", "qb_dropback",
+]
+
 SCORING_PROB_COLS = [
     "td_prob", "fg_prob", "no_score_prob", "opp_td_prob",
 ]
@@ -64,7 +69,7 @@ ADVANCED_COLS = [
 ]
 
 KEEP_COLS = (
-    GAME_STATE_COLS + FORMATION_COLS + OUTCOME_COLS
+    GAME_STATE_COLS + FORMATION_COLS + OUTCOME_COLS + QB_COLS
     + SCORING_PROB_COLS + DRIVE_COLS + ADVANCED_COLS
 )
 

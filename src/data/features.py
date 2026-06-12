@@ -142,6 +142,69 @@ def build_defense_stats(df):
     return weekly
 
 
+def build_qb_stats(df):
+    """
+    Rolling form for each team's CURRENT starting quarterback.
+
+    Why: team form smears over the actual humans. If the starter goes
+    down, off_epa_pass takes ~4 weeks to absorb the backup; the QB's own
+    rolling stats switch over immediately.
+
+    Two steps:
+      1. Per-QB form: for every (season, QB, week) with at least one
+         dropback, average qb_epa / cpoe / sack over his dropbacks that
+         week, then roll over his previous ROLLING_WEEKS games played
+         (same shift(1) trick as team form - never the current week).
+      2. Who's the QB this week: each (season, week, team)'s primary
+         passer = whoever took the most dropbacks that week. Knowing
+         who starts is legitimate pre-game information; his STATS still
+         come only from previous weeks. (Edge case: if the starter is
+         hurt mid-game, the reliever can own the whole week's plays -
+         rare enough to accept as noise.)
+
+    The features are prefixed qbf_ (QB form), NOT qb_, because raw
+    outcome columns like qb_epa / qb_scramble already use that prefix
+    and must never be auto-included as model features.
+
+    Returns
+    -------
+    pd.DataFrame with columns:
+        season, week, posteam,
+        qbf_epa_per_dropback, qbf_cpoe, qbf_sack_rate
+    """
+    drops = df[(df["qb_dropback"] == 1) & df["passer_player_id"].notna()]
+
+    # Step 1: per-QB weekly numbers -> rolling previous-games form.
+    weekly = (
+        drops.groupby(["season", "passer_player_id", "week"])
+        .agg(
+            qbf_epa_per_dropback=("qb_epa", "mean"),
+            qbf_cpoe=("cpoe", "mean"),
+            qbf_sack_rate=("sack", "mean"),
+        )
+        .reset_index()
+        .sort_values(["season", "passer_player_id", "week"])
+    )
+    stat_cols = [c for c in weekly.columns if c.startswith("qbf_")]
+    weekly[stat_cols] = weekly.groupby(["season", "passer_player_id"])[
+        stat_cols
+    ].transform(_rolling_previous)
+
+    # Step 2: each team-week's primary passer (most dropbacks that week).
+    counts = (
+        drops.groupby(["season", "week", "posteam", "passer_player_id"])
+        .size()
+        .reset_index(name="n_dropbacks")
+        .sort_values("n_dropbacks")
+        .drop_duplicates(subset=["season", "week", "posteam"], keep="last")
+    )
+
+    qb_form = counts.merge(
+        weekly, on=["season", "passer_player_id", "week"], how="left"
+    )
+    return qb_form[["season", "week", "posteam"] + stat_cols]
+
+
 def add_team_features(df, save=True):
     """
     Build rolling team stats and join them onto every play.
@@ -171,15 +234,19 @@ def add_team_features(df, save=True):
     print(f"Offense stats : {off.shape[0]:,} team-week rows")
     de = build_defense_stats(df)
     print(f"Defense stats : {de.shape[0]:,} team-week rows")
+    qb = build_qb_stats(df)
+    print(f"QB form stats : {qb.shape[0]:,} team-week rows")
 
     rows_before = len(df)
     df = df.merge(off, on=["season", "week", "posteam"], how="left")
     df = df.merge(de, on=["season", "week", "defteam"], how="left")
+    df = df.merge(qb, on=["season", "week", "posteam"], how="left")
     assert len(df) == rows_before, "Join created duplicate rows!"
 
-    # Fill NaNs with the season mean for that column (week-1 games have no
-    # rolling history yet, so we substitute "an average team").
-    feature_cols = [c for c in df.columns if c.startswith(("off_", "def_"))]
+    # Fill NaNs with the season mean for that column (week-1 games and
+    # first-start QBs have no rolling history yet, so we substitute "an
+    # average team" / "an average QB").
+    feature_cols = [c for c in df.columns if c.startswith(("off_", "def_", "qbf_"))]
     for col in feature_cols:
         season_means = df.groupby("season")[col].transform("mean")
         df[col] = df[col].fillna(season_means)
