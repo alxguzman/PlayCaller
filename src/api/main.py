@@ -82,6 +82,13 @@ class GameSituation(BaseModel):
         "1 TE, '12' = 1 RB 2 TE. Omit for the model's typical-play default.",
         examples=["11"],
     )
+    defenders_in_box: Optional[int] = Field(
+        default=None,
+        ge=3,
+        le=11,
+        description="Pre-snap box count, e.g. 8 = run-stuffing loaded box. "
+        "Omit for a typical box.",
+    )
     success_floor_gap: float = Field(
         default=SUCCESS_FLOOR_GAP,
         ge=0.0,

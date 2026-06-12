@@ -19,8 +19,8 @@ Built with: pandas · XGBoost · FastAPI · React · Claude API
    season (calibration, SHAP, and a coach-agreement outcome test).
 3. **API** — FastAPI backend (`src/api/`): POST `/recommend` returns the
    full ranked call sheet, with a `success_floor_gap` risk dial and
-   optional `formation`/`personnel` pins. GET `/teams` and GET `/options`
-   list the legal values for dropdowns.
+   optional `formation`/`personnel`/`defenders_in_box` pins. GET `/teams`
+   and GET `/options` list the legal values for dropdowns.
 4. **AI play caller** *(Phase 4)* — Claude turns the numbers into a
    coordinator-style explanation: *"3rd & 7, their secondary has been
    leaking EPA for a month — air it out."*
