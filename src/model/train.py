@@ -81,7 +81,9 @@ def prepare_data(df):
     """
     usable = df[df["play_concept"].notna() & df[TARGET].notna()].copy()
 
-    team_form = [c for c in usable.columns if c.startswith(("off_", "def_"))]
+    # qbf_ = rolling QB form (qb_ would also match outcome columns like
+    # qb_epa - that prefix must never be auto-included).
+    team_form = [c for c in usable.columns if c.startswith(("off_", "def_", "qbf_"))]
     numeric = [c for c in NUMERIC_FEATURES if c in usable.columns] + team_form
     categorical = [c for c in CATEGORICAL_FEATURES if c in usable.columns]
 
@@ -123,7 +125,9 @@ def build_team_form_lookup(df):
     latest = df.sort_values(["season", "week"]).drop_duplicates(
         subset=["posteam"], keep="last"
     )
-    off_cols = [c for c in df.columns if c.startswith("off_")]
+    # QB form rides along with the offense lookup: both are keyed by
+    # posteam and answer "what does this team bring on offense right now?"
+    off_cols = [c for c in df.columns if c.startswith(("off_", "qbf_"))]
     off_lookup = latest.set_index("posteam")[off_cols]
 
     latest_d = df.sort_values(["season", "week"]).drop_duplicates(
