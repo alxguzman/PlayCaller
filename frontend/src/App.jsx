@@ -21,7 +21,7 @@ const DEFAULT_SITUATION = {
   formation: "", // "" = let the model pick each concept's natural home
   personnel: "",
   defenders_in_box: "", // "" = typical box
-  success_floor_gap: 0.1,
+  success_floor_gap: 0.05,
 };
 
 /** mm:ss left in the quarter -> seconds left in the game. */
