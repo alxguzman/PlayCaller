@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 from src.model.evaluate import load_artifact
+from src.model.train import NUMERIC_FEATURES, add_box_interactions
 
 # Common-sense guardrails on top of the model:
 # a sneak only makes sense in very short yardage.
@@ -36,9 +37,17 @@ SNEAK_MAX_YDSTOGO = 2
 # points of the best available option (floor). This stops the inflated
 # EPA of rarely-called aggressive plays (selection bias) from recommending
 # a 35%-success deep shot when a 65%-success option exists.
-# 0.10 is deliberately tight - selection bias inflates the classifier's
-# view of rare aggressive plays too, so a loose floor never bites.
-SUCCESS_FLOOR_GAP = 0.10
+# 0.05 (was 0.10): selection bias inflates the classifier's view of rare
+# aggressive plays too, so at 0.10 a play-action deep shot could clear the
+# floor over a QB sneak on 3rd-and-1 by a few thousandths. A 2025 backtest
+# showed 0.05 keeps nearly all the success edge while doubling the EPA
+# edge of the picks.
+SUCCESS_FLOOR_GAP = 0.05
+
+# These stay NaN when the caller doesn't pin a box count: NaN means
+# "not charted", which is exactly how ~2/3 of training plays look.
+# Filling a median here would fabricate information.
+BOX_FEATURES = {"defenders_in_box", "box_x_run", "box_x_pass"}
 
 
 def _build_candidates(situation, artifact):
@@ -85,21 +94,33 @@ def _build_candidates(situation, artifact):
 def _encode_like_training(candidates, artifact):
     """
     One-hot encode the candidate rows and align them to the exact column
-    set the model was trained on. reindex() adds any missing one-hot
-    columns as 0 and drops anything the model has never seen.
+    set the model was trained on.
+
+    Fill rules for columns the caller didn't supply:
+      * numeric features  -> training median ("a typical play"). The old
+        code reindexed with fill_value=0, which silently fed the model
+        wp=0, temp=0, 0 timeouts etc. for every live recommendation.
+      * box features      -> stay NaN ("not charted", same as training)
+      * one-hot dummies   -> 0 (the category simply isn't present;
+        NaN would send XGBoost down its learned "missing" branch)
     """
+    candidates = add_box_interactions(candidates)
     cat_cols = [
         c for c in ["play_concept", "formation", "personnel", "posteam", "defteam", "roof"]
         if c in candidates.columns
     ]
     X = pd.get_dummies(candidates, columns=cat_cols)
-    X = X.reindex(columns=artifact["feature_columns"], fill_value=0)
+    X = X.reindex(columns=artifact["feature_columns"])  # absent columns -> NaN
 
-    # Fill remaining numeric gaps with training medians ("a typical play").
     defaults = artifact["numeric_defaults"]
     for col in X.columns[X.isna().any()]:
-        if col in defaults.index:
+        if col in BOX_FEATURES:
+            continue
+        is_numeric = col in NUMERIC_FEATURES or col.startswith(("off_", "def_", "qbf_"))
+        if is_numeric and col in defaults.index:
             X[col] = X[col].fillna(defaults[col])
+        else:
+            X[col] = X[col].fillna(0)
     return X
 
 

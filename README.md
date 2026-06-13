@@ -46,7 +46,7 @@ each one covers the other's blind spot:
   the conditions, so their historical EPA is inflated, and a pure-EPA
   ranker recommends them everywhere — even 3rd-and-1, over a 74% QB
   sneak. So the recommendation must come from plays whose success
-  probability is within `SUCCESS_FLOOR_GAP` (default 0.10) of the
+  probability is within `SUCCESS_FLOOR_GAP` (default 0.05) of the
   safest available option.
 
 **The pick = highest expected EPA among plays that clear the floor.**

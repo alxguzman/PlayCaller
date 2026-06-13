@@ -42,7 +42,29 @@ NUMERIC_FEATURES = [
     "posteam_timeouts_remaining", "defteam_timeouts_remaining",
     "goal_to_go", "spread_line", "wp", "temp", "wind",
     "defenders_in_box",  # pre-snap look (NaN when not charted - XGBoost handles it)
+    "box_x_run", "box_x_pass",  # built by add_box_interactions()
 ]
+
+RUN_CONCEPTS = {"inside_run", "off_tackle_run", "outside_run", "qb_sneak"}
+
+
+def add_box_interactions(df):
+    """
+    Split the box count into two columns: one that's live on run plays,
+    one that's live on pass plays (the other is 0).
+
+    Why: a loaded box hurts runs but HELPS passes (fewer defenders deep) -
+    opposite directions. As a single column the tree has to discover that
+    interaction with play_concept on its own, and in practice it learned
+    ~1/4 of the real effect. These columns hand it the interaction
+    directly. NaN (uncharted play) stays NaN in both.
+    """
+    df = df.copy()
+    box = df["defenders_in_box"] if "defenders_in_box" in df.columns else np.nan
+    is_run = df["play_concept"].isin(RUN_CONCEPTS)
+    df["box_x_run"] = box * is_run
+    df["box_x_pass"] = box * ~is_run
+    return df
 
 # Rolling team-form features built in features.py (off_* and def_*) get
 # added automatically in prepare_data().
@@ -80,6 +102,7 @@ def prepare_data(df):
                           play_concept and epa for recommender evaluation)
     """
     usable = df[df["play_concept"].notna() & df[TARGET].notna()].copy()
+    usable = add_box_interactions(usable)
 
     # qbf_ = rolling QB form (qb_ would also match outcome columns like
     # qb_epa - that prefix must never be auto-included).
