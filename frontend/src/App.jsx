@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchOptions, fetchRecommendation } from "./api.js";
+import { fetchDefenseRanks, fetchOffenseRanks, fetchOptions, fetchRecommendation } from "./api.js";
 import Header from "./components/Header.jsx";
 import SituationPanel from "./components/SituationPanel.jsx";
 import RecommendationCard from "./components/RecommendationCard.jsx";
 import Field from "./components/Field.jsx";
 import PlayComparison from "./components/PlayComparison.jsx";
 import CallSheet from "./components/CallSheet.jsx";
+import RankPanel from "./components/RankPanel.jsx";
 import HistoryStrip from "./components/HistoryStrip.jsx";
+
+/** Build the three Overall/Pass/Run rows a RankPanel renders. */
+function rankRows(ranks) {
+  if (!ranks) return null;
+  return [
+    { label: "Overall", rank: ranks.overall_rank, epa: ranks.overall_epa },
+    { label: "vs Pass", rank: ranks.pass_rank, epa: ranks.pass_epa },
+    { label: "vs Run", rank: ranks.run_rank, epa: ranks.run_epa },
+  ];
+}
 
 const DEFAULT_SITUATION = {
   posteam: "KC",
@@ -96,6 +107,8 @@ function loadHistory() {
 export default function App() {
   const [situation, setSituation] = useState(DEFAULT_SITUATION);
   const [options, setOptions] = useState(null); // { teams, formations, personnel }
+  const [defense, setDefense] = useState(null); // { n_teams, ranks }
+  const [offense, setOffense] = useState(null); // { n_teams, ranks }
   const [rec, setRec] = useState(null); // last /recommend response
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState(null);
@@ -114,6 +127,13 @@ export default function App() {
         setApiError(null);
       })
       .catch((e) => setApiError(`Can't reach the API (${e.message}).`));
+    // Team-form ranks are a static snapshot - fetch once alongside options.
+    fetchOffenseRanks()
+      .then(setOffense)
+      .catch(() => setOffense(null));
+    fetchDefenseRanks()
+      .then(setDefense)
+      .catch(() => setDefense(null));
   }, []);
 
   useEffect(loadOptions, [loadOptions]);
@@ -210,7 +230,25 @@ export default function App() {
           />
           <PlayComparison rec={rec} />
         </section>
-        <CallSheet rec={rec} floorGap={situation.success_floor_gap} />
+        <section className="right-col">
+          <CallSheet rec={rec} floorGap={situation.success_floor_gap} />
+          <RankPanel
+            title={`${situation.posteam} Offense · last 4 weeks`}
+            rows={rankRows(offense?.ranks?.[situation.posteam])}
+            nTeams={offense?.n_teams ?? 32}
+            epaSuffix="EPA/play"
+            hint="League rank by EPA per play (1 = best). Rolling average of the offense's previous 4 games — higher is better."
+            emptyText="No form data for this offense."
+          />
+          <RankPanel
+            title={`${situation.defteam} Defense · last 4 weeks`}
+            rows={rankRows(defense?.ranks?.[situation.defteam])}
+            nTeams={defense?.n_teams ?? 32}
+            epaSuffix="EPA/play allowed"
+            hint="League rank by EPA allowed per play (1 = stingiest). Rolling average of the defense's previous 4 games — lower is better."
+            emptyText="No form data for this defense."
+          />
+        </section>
       </main>
       <HistoryStrip history={history} onClear={clearHistory} />
     </div>

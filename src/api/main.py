@@ -179,6 +179,59 @@ def options():
     }
 
 
+def _rank_table(df, specs):
+    """
+    Build a {n_teams, ranks:{TEAM:{key_rank, key_epa, ...}}} payload from a
+    team-form lookup. `specs` is a list of (key, column, ascending) - rank 1
+    always means "best", so pass ascending=True where lower is better
+    (defense: EPA allowed) and ascending=False where higher is better
+    (offense: EPA gained).
+    """
+    rank_series = {
+        key: df[column].rank(ascending=asc, method="min") for key, column, asc in specs
+    }
+    ranks = {
+        team: {
+            **{f"{key}_rank": int(rank_series[key][team]) for key, _, _ in specs},
+            **{f"{key}_epa": round(float(df.loc[team, col]), 3) for key, col, _ in specs},
+        }
+        for team in df.index
+    }
+    return {"n_teams": int(len(df)), "ranks": ranks}
+
+
+@app.get("/defense-ranks")
+def defense_ranks():
+    """
+    Each team's defense rank from its latest rolling 4-week form (the same
+    snapshot the recommender fills in). Rank 1 = stingiest, i.e. lowest EPA
+    allowed per play. Static snapshot, so the frontend fetches it once and
+    looks up whichever defense is selected.
+    """
+    de = get_artifact()["def_form_lookup"]
+    # Lower EPA allowed = better defense, so rank ascending (1 = best).
+    return _rank_table(de, [
+        ("overall", "def_epa_allowed_per_play", True),
+        ("pass", "def_epa_allowed_pass", True),
+        ("run", "def_epa_allowed_run", True),
+    ])
+
+
+@app.get("/offense-ranks")
+def offense_ranks():
+    """
+    Each team's offense rank from its latest rolling 4-week form. Rank 1 =
+    best, i.e. highest EPA gained per play. Mirror of /defense-ranks.
+    """
+    off = get_artifact()["off_form_lookup"]
+    # Higher EPA = better offense, so rank descending (1 = best).
+    return _rank_table(off, [
+        ("overall", "off_epa_per_play", False),
+        ("pass", "off_epa_pass", False),
+        ("run", "off_epa_run", False),
+    ])
+
+
 @app.post("/recommend", response_model=Recommendation)
 def recommend(situation: GameSituation):
     """

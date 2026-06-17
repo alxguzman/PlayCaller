@@ -23,6 +23,16 @@ export function fetchOptions() {
   return getJSON("/options");
 }
 
+/** Per-team defense ranks from rolling 4-week form: { n_teams, ranks } */
+export function fetchDefenseRanks() {
+  return getJSON("/defense-ranks");
+}
+
+/** Per-team offense ranks from rolling 4-week form: { n_teams, ranks } */
+export function fetchOffenseRanks() {
+  return getJSON("/offense-ranks");
+}
+
 /** Full ranked call sheet for one game situation. */
 export function fetchRecommendation(situation) {
   return getJSON("/recommend", {
