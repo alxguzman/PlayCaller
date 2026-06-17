@@ -172,7 +172,12 @@ def recommendation_agreement(artifact=None, show=False):
     success probability (classifier) is within SUCCESS_FLOOR_GAP of the
     safest option. Falls back to pure success_prob if no regressor.
     """
-    from src.model.recommend import SUCCESS_FLOOR_GAP
+    from src.model.recommend import (
+        RUN_PASS_BALANCE,
+        SUCCESS_FLOOR_GAP,
+        run_credibility,
+    )
+    from src.model.train import RUN_CONCEPTS
 
     artifact = artifact or load_artifact()
     model = artifact["model"]
@@ -212,9 +217,16 @@ def recommendation_agreement(artifact=None, show=False):
 
     if epa_model is not None:
         # Floor-and-ceiling: eligible = within the gap of the safest play;
-        # recommendation = highest expected EPA among eligible.
+        # recommendation = highest balance-adjusted EPA among eligible. The
+        # run/pass balance credit (runs only, scaled by run credibility at
+        # each play's down & distance) matches recommend_play so the test
+        # grades the same policy the API ships.
+        is_run = np.array([c in RUN_CONCEPTS for c in concepts])
+        down = X_test["down"].to_numpy()
+        cred = np.array([run_credibility(d, t) for d, t in zip(down, ydstogo)])
+        credit = RUN_PASS_BALANCE * cred[:, None] * is_run[None, :]
         floor = probs.max(axis=1, keepdims=True) - SUCCESS_FLOOR_GAP
-        score = np.where(probs >= floor, epas, -np.inf)
+        score = np.where(probs >= floor, epas + credit, -np.inf)
     else:
         score = probs
 

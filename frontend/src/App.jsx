@@ -24,6 +24,41 @@ const DEFAULT_SITUATION = {
   success_floor_gap: 0.05,
 };
 
+const randInt = (lo, hi) => Math.floor(Math.random() * (hi - lo + 1)) + lo;
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+/**
+ * Roll a fresh, valid game situation for the demo "Randomize" button.
+ * Every Game Context and Offensive Look input gets a new value; the risk
+ * dial is left where the user set it (it's a tuning knob, not a game fact).
+ */
+function randomSituation(options, prev) {
+  const teams = options?.teams ?? [prev.posteam, prev.defteam];
+  const posteam = pick(teams);
+  // Same team on both sides is invalid - pick the defense from the rest.
+  const others = teams.filter((t) => t !== posteam);
+  const defteam = others.length ? pick(others) : prev.defteam;
+
+  const yardline_100 = randInt(1, 99);
+  return {
+    ...prev,
+    posteam,
+    defteam,
+    down: randInt(1, 4),
+    // Never ask for more yards than there are to the end zone (goal-to-go).
+    ydstogo: Math.min(randInt(1, 15), yardline_100),
+    yardline_100,
+    qtr: randInt(1, 4),
+    clock: `${randInt(0, 14)}:${String(randInt(0, 59)).padStart(2, "0")}`,
+    offScore: randInt(0, 35),
+    defScore: randInt(0, 35),
+    // "" = Auto; include it so demos sometimes show the model's own pick.
+    formation: pick(["", ...(options?.formations ?? [])]),
+    personnel: pick(["", ...(options?.personnel ?? [])]),
+    defenders_in_box: pick(["", "3", "4", "5", "6", "7", "8", "9", "10", "11"]),
+  };
+}
+
 /** mm:ss left in the quarter -> seconds left in the game. */
 function gameSecondsRemaining(qtr, clock) {
   const m = /^(\d{1,2}):([0-5]\d)$/.exec(clock?.trim() ?? "");
@@ -121,6 +156,11 @@ export default function App() {
     });
   }, [rec, situation]);
 
+  const randomize = useCallback(
+    () => setSituation((s) => randomSituation(options, s)),
+    [options]
+  );
+
   const clearHistory = useCallback(() => {
     localStorage.removeItem("pc-history");
     setHistory([]);
@@ -153,6 +193,7 @@ export default function App() {
           options={options}
           onChange={update}
           onReset={() => setSituation(DEFAULT_SITUATION)}
+          onRandomize={randomize}
         />
         <section className="center-col">
           <RecommendationCard

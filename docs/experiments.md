@@ -158,3 +158,64 @@ inflated by selection bias everywhere, not just short yardage; and EPA
 is clock-blind, so the model will never call the "kill the clock" run
 when protecting a Q4 lead. Win-probability-aware ranking is the
 principled fix for both.
+
+---
+
+## Experiment: run/pass balance prior (`run-pass-balance` branch)
+
+Symptom: the recommender still leaned pass on almost every non-short-yardage
+down. Measured on the 2025 holdout, it recommended a run only **11.4%** of
+plays vs the **42.4%** real coaches actually ran. Diagnosis (not the
+defensive ratings - those already split run/pass): pass plays carry
+structurally higher EPA than runs league-wide, so a single-play EPA
+maximizer picks pass by construction. The deeper cause is a game-theory
+blind spot - the model scores each play against the defense's *average*
+posture, so it never pays the predictability tax of becoming one-dimensional
+(if you never run, defenses stop respecting it and pass EPA collapses).
+
+Fix (no retrain - pure post-scoring re-ranking, like `success_floor_gap`): a
+`run_pass_balance` knob adds an EPA credit to run concepts for RANKING ONLY
+(displayed `expected_epa` stays honest). The credit is scaled by a
+down/distance "run credibility" weight so it never fires on an obvious
+passing down: full credit in short yardage, decaying to 0 over 16 yds on
+downs 1-2 and over 4 yds on downs 3-4. Default `0.70`.
+
+A flat (un-scaled) credit was rejected: at the run-share-matching value it
+recommended `outside_run` on 3rd-and-8 - trading one unrealistic extreme
+for another. The taper fixes that.
+
+### Results (same 31,924 test plays; classifier/regressor unchanged - this is ranking-only)
+
+| Metric                     | Baseline (b=0) | Balance (b=0.70) | Change   |
+| -------------------------- | -------------- | ---------------- | -------- |
+| Recommended run share      | 11.4%          | 33.8%            | +22.4pt  |
+| Run rec on 3rd/4th-&-7+    | 0.7%           | 0.7%             | flat     |
+| Agreement rate             | 6.0%           | 7.2%             | +1.2pt   |
+| Agreed-plays success rate  | 53.7%          | 50.0%            | -3.7pt   |
+| Agreed-plays EPA/play      | +0.371         | +0.249           | see note |
+| Disagreed-plays EPA/play   | +0.049         | +0.054           | flat     |
+
+Reference points: real coaches ran 42.4% overall, 8.7% on 3rd/4th-&-7+. The
+default lands run share at ~34% - deliberately a touch more pass-leaning
+than coaches, matching the analytics consensus that teams should pass
+slightly more than they do. It never over-runs passing downs (0.7%, even
+more conservative than coaches there).
+
+Live sanity sweep (b=0 -> b=0.70): 1st-&-10 stays a deep shot; 2nd-&-3 flips
+pass -> outside run; 3rd-&-1 stays a sneak; 3rd-&-8 and 3rd-&-12 stay passes.
+
+The agreed-EPA drop (+0.371 -> +0.249) is the expected regression toward the
+mean from a 20% larger agreed set (1,906 -> 2,292 plays) that now includes
+lower-EPA-but-realistic run calls - the same dynamic noted for the gap
+0.10->0.05 change above. Both agreed values still dwarf the disagreed
+baseline (+0.05), so the model's preferences still carry real signal.
+
+### Verdict: MERGED (pending review)
+
+Better on the goal that motivated it (realism: run share 11%->34%, sensible
+per-situation calls) and on agreement rate, with the model's signal
+preserved. The classifier and EPA regressor are untouched, so no holdout
+metric there can regress. Remaining limit: the prior is a hand-shaped
+down/distance taper, not win-probability-aware - it still can't call the
+"kill the clock" run to protect a Q4 lead. The knob is exposed in the
+API/UI (`run_pass_balance`, 0.0-1.0) alongside the risk dial.

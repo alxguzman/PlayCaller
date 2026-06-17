@@ -26,11 +26,44 @@ import numpy as np
 import pandas as pd
 
 from src.model.evaluate import load_artifact
-from src.model.train import NUMERIC_FEATURES, add_box_interactions
+from src.model.train import NUMERIC_FEATURES, RUN_CONCEPTS, add_box_interactions
 
 # Common-sense guardrails on top of the model:
 # a sneak only makes sense in very short yardage.
 SNEAK_MAX_YDSTOGO = 2
+
+# The run/pass balance prior (game theory the static model can't see).
+# A single-play EPA maximizer always leans pass, because pass plays carry
+# structurally higher EPA than runs league-wide. But play-calling is a
+# mixed strategy: if you never run, defenses stop respecting it and your
+# pass EPA collapses. The model scores each play assuming the defense's
+# AVERAGE posture, so it never pays this predictability tax. We add an EPA
+# credit to run concepts for RANKING ONLY (the displayed expected_epa stays
+# honest). 0.0 = pure EPA (pass-heavy on every down).
+#
+# The credit is scaled by how CREDIBLE a run is in the situation, so it
+# never recommends a run when you obviously must pass (3rd-and-long): a run
+# stays a real threat through ~1st/2nd-and-medium, but on 3rd/4th down only
+# in short yardage. With the default the recommender's 2025-holdout run
+# share is ~34% (vs coaches' 42% - deliberately a touch more pass-leaning,
+# as the analytics consensus prescribes) and it runs on 3rd/4th-and-7+ just
+# 0.7% of the time (coaches 8.7%). See docs/experiments.md.
+RUN_PASS_BALANCE = 0.70
+
+# Yards-to-go over which a run stops being a credible call, by down. The
+# credit decays linearly to 0 across this many yards (downs 1-2 keep runs
+# live much longer than 3rd/4th down).
+_RUN_HORIZON_EARLY = 16
+_RUN_HORIZON_LATE = 4
+
+
+def run_credibility(down, ydstogo):
+    """Weight in [0, 1]: how credible a run is at this down & distance.
+    1.0 in short yardage, decaying to 0.0 on long yardage (faster on
+    3rd/4th down). Scales the run/pass balance credit so it never fires on
+    an obvious passing down."""
+    horizon = _RUN_HORIZON_EARLY if (down or 1) <= 2 else _RUN_HORIZON_LATE
+    return max(0.0, min(1.0, 1.0 - max(0, ydstogo - 1) / horizon))
 
 # The floor-and-ceiling blend: the EPA regressor picks the play (ceiling),
 # but only among plays whose success probability is within this many
@@ -124,7 +157,12 @@ def _encode_like_training(candidates, artifact):
     return X
 
 
-def recommend_play(situation, artifact=None, success_floor_gap=SUCCESS_FLOOR_GAP):
+def recommend_play(
+    situation,
+    artifact=None,
+    success_floor_gap=SUCCESS_FLOOR_GAP,
+    run_pass_balance=RUN_PASS_BALANCE,
+):
     """
     Rank every play concept for one game situation.
 
@@ -141,6 +179,11 @@ def recommend_play(situation, artifact=None, success_floor_gap=SUCCESS_FLOOR_GAP
         How far (in probability points) a play's success chance may trail
         the safest option and still be recommended. Smaller = more
         conservative recommendations.
+    run_pass_balance : float
+        EPA credit added to run concepts for ranking only, modelling the
+        value of staying unpredictable. 0.0 = pure EPA (pass-heavy); higher
+        pulls the run share up. Orthogonal to success_floor_gap (that's the
+        conversion-risk axis; this is the play-type axis).
 
     Returns
     -------
@@ -174,7 +217,15 @@ def recommend_play(situation, artifact=None, success_floor_gap=SUCCESS_FLOOR_GAP
     ranking = pd.DataFrame({"play_concept": concepts, "success_prob": probs})
     if epa_model is not None:
         ranking["expected_epa"] = epa_model.predict(X)
-        sort_col = "expected_epa"
+        # Rank by EPA plus the run/pass balance credit (runs only, scaled by
+        # how credible a run is here). The credit drives ordering but is NOT
+        # shown - expected_epa stays the model's honest prediction.
+        is_run = ranking["play_concept"].isin(RUN_CONCEPTS)
+        credit = run_pass_balance * run_credibility(
+            situation.get("down", 1), situation.get("ydstogo", 10)
+        )
+        ranking["_rank_score"] = ranking["expected_epa"] + credit * is_run
+        sort_col = "_rank_score"
     else:
         sort_col = "success_prob"
     ranking = ranking.sort_values(sort_col, ascending=False, ignore_index=True)
@@ -193,9 +244,10 @@ def recommend_play(situation, artifact=None, success_floor_gap=SUCCESS_FLOOR_GAP
     ranking["meets_floor"] = ranking["success_prob"] >= floor
     eligible = recommendable[recommendable["success_prob"] >= floor]
 
-    # Best = highest expected EPA among eligible plays (ranking is already
-    # sorted by the right column, so the first eligible row wins).
+    # Best = top of the (balance-adjusted) ranking among eligible plays -
+    # ranking is already sorted, so the first eligible row wins.
     best = eligible.iloc[0]
+    ranking = ranking.drop(columns="_rank_score", errors="ignore")
     return {
         "best_call": best["play_concept"],
         "best_prob": float(best["success_prob"]),
