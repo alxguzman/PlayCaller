@@ -28,10 +28,10 @@ Built with: pandas · XGBoost · FastAPI · React · Claude API
    situation, watch the formation diagram and ranked call sheet react
    live. `npm run dev` in `frontend/` with the API running.
 
-## How the recommender picks a play: floor and ceiling
+## How the recommender picks a play: floor, ceiling, and balance
 
 Two models score every candidate play call for the same situation, and
-each one covers the other's blind spot:
+a balance prior corrects a blind spot they share. Three pieces:
 
 - **The ceiling — EPA regressor.** Candidates are ranked by *expected
   points added*: how much a call is worth on average. This is the right
@@ -45,23 +45,49 @@ each one covers the other's blind spot:
   play-action deep shots) only appear in the data when coaches liked
   the conditions, so their historical EPA is inflated, and a pure-EPA
   ranker recommends them everywhere — even 3rd-and-1, over a 74% QB
-  sneak. So the recommendation must come from plays whose success
-  probability is within `SUCCESS_FLOOR_GAP` (default 0.05) of the
-  safest available option.
+  sneak. So a play is only eligible if its success probability is within
+  `success_floor_gap` (the **risk dial**, default 0.05) of the safest
+  available option. The dial is capped at **0.06**: beyond that the floor
+  drops far enough that the inflated-EPA deep pass clears it almost
+  everywhere, so ~70%+ of picks collapse to deep passes and the dial
+  stops doing anything useful.
 
-**The pick = highest expected EPA among plays that clear the floor.**
+- **The balance — run/pass prior.** Even within the floor, pass plays
+  carry structurally higher EPA than runs league-wide, so a single-play
+  EPA maximizer leans pass on nearly every down. That ignores game
+  theory: play-calling is a mixed strategy, and if you never run,
+  defenses stop respecting it and your pass EPA collapses. The model
+  can't see this — it scores each play against the defense's *average*
+  posture — so we add an EPA credit to run concepts for **ranking only**
+  (`run_pass_balance`, the **balance dial**, default 0.70; the displayed
+  EPA stays the model's honest number). The credit is scaled by how
+  *credible* a run is at that down and distance: full in short yardage,
+  decaying to zero by ~1st/2nd-and-long and much faster on 3rd/4th down,
+  so it never recommends a run when you obviously must pass. With the
+  default, the recommender's run share on the 2025 holdout is ~34% (real
+  coaches: 42%) and it runs on 3rd/4th-and-7+ just 0.7% of the time.
 
-In practice: on 1st-and-10 the play-action deep shot wins legitimately
-(its conversion odds are competitive). On 3rd-and-1 it gets blocked —
-it trails the sneak by 11 points of conversion probability — and a
-high-percentage play-action short pass wins instead. The full ranking
-table always shows every play with both numbers and a `meets_floor`
-flag, so nothing is hidden.
+**The pick = the highest balance-adjusted EPA among plays that clear the
+floor.**
+
+In practice: on 1st-and-10 the play-action deep shot still wins
+legitimately (its conversion odds are competitive). On 2nd-and-3 the
+balance credit lifts an outside run over a marginally-higher-EPA short
+pass. On 3rd-and-1 the deep shot gets blocked by the floor and the QB
+sneak wins; on 3rd-and-8 the run credit is zero, so it stays a pass. The
+full ranking table always shows every play with both model numbers and a
+`meets_floor` flag, so nothing is hidden.
 
 Two extra guardrails: QB sneaks are never recommended beyond 2 yards to
 go, and trick plays never take the top slot (they're only called when
 coaches expect them to work, so their stats are flattered — the same
 selection bias in its purest form).
+
+The two dials are independent axes, settable per request and live in the
+dashboard: `success_floor_gap` is the **conversion-risk** axis ("how much
+risk for upside?") and `run_pass_balance` is the **play-type** axis ("how
+predictable am I willing to be?"). See `docs/experiments.md` for the
+holdout numbers behind the defaults.
 
 ```
 PlayCaller/
@@ -126,7 +152,12 @@ python -m src.data.features    # rebuild data/processed/pbp_features.csv
 python -m src.model.train      # train + save the model artifact
 python -m src.model.evaluate   # metrics + confusion matrix + SHAP charts
 python -m src.model.recommend  # demo recommendation (3rd & 7, KC vs BUF)
+
 uvicorn src.api.main:app --reload   # start the API, docs at /docs
+
+cd frontend    #activate frontend 
+npm run dev
+
 ```
 
 ### 5. What success looks like

@@ -15,7 +15,7 @@ function Row({ label, children }) {
  * The left panel: every input the /recommend endpoint accepts, plus the
  * scoreboard fields it's derived from.
  */
-export default function SituationPanel({ situation: s, options, onChange, onReset }) {
+export default function SituationPanel({ situation: s, options, onChange, onReset, onRandomize }) {
   const teams = options?.teams ?? [s.posteam, s.defteam];
   const num = (key, lo, hi) => (e) => {
     const v = Number(e.target.value);
@@ -154,8 +154,8 @@ export default function SituationPanel({ situation: s, options, onChange, onRese
         <input
           type="range"
           min="0"
-          max="0.5"
-          step="0.01"
+          max="0.06"
+          step="0.005"
           value={s.success_floor_gap}
           onChange={(e) => onChange({ success_floor_gap: Number(e.target.value) })}
         />
@@ -165,9 +165,14 @@ export default function SituationPanel({ situation: s, options, onChange, onRese
         <span>chase upside</span>
       </div>
 
-      <button className="reset-btn" onClick={onReset}>
-        ⟳ Reset Situation
-      </button>
+      <div className="panel-actions">
+        <button className="randomize-btn" onClick={onRandomize}>
+          🎲 Randomize
+        </button>
+        <button className="reset-btn" onClick={onReset}>
+          ⟳ Reset
+        </button>
+      </div>
     </aside>
   );
 }

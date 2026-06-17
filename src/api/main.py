@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from src.model.evaluate import load_artifact
-from src.model.recommend import SUCCESS_FLOOR_GAP, recommend_play
+from src.model.recommend import RUN_PASS_BALANCE, SUCCESS_FLOOR_GAP, recommend_play
 
 # The artifact (model + lookups) is ~1 MB and slow-ish to deserialize,
 # so load it once at startup and share it across requests instead of
@@ -92,10 +92,19 @@ class GameSituation(BaseModel):
     success_floor_gap: float = Field(
         default=SUCCESS_FLOOR_GAP,
         ge=0.0,
-        le=0.5,
+        le=0.06,
         description="The risk dial: how far a play's success probability may "
         "trail the safest option and still be recommended. "
-        "Smaller = safer calls, larger = chase upside.",
+        "Smaller = safer calls, larger = chase upside. Capped at 0.06: "
+        "beyond that the pick collapses to deep passes everywhere.",
+    )
+    run_pass_balance: float = Field(
+        default=RUN_PASS_BALANCE,
+        ge=0.0,
+        le=1.0,
+        description="The balance dial: EPA credit added to run plays for "
+        "ranking, modelling the value of staying unpredictable. "
+        "0 = pure EPA (pass-heavy); the default matches real NFL run rates.",
     )
 
     @field_validator("posteam", "defteam")
@@ -201,11 +210,16 @@ def recommend(situation: GameSituation):
                 detail=f"Unknown {field} '{value}'. Valid values: {valid}",
             )
 
-    # The risk dial is an API knob, not a model feature - keep it out of
-    # the situation dict we hand to the model.
-    sit = situation.model_dump(exclude_none=True, exclude={"success_floor_gap"})
+    # The dials are API knobs, not model features - keep them out of the
+    # situation dict we hand to the model.
+    sit = situation.model_dump(
+        exclude_none=True, exclude={"success_floor_gap", "run_pass_balance"}
+    )
     result = recommend_play(
-        sit, artifact=artifact, success_floor_gap=situation.success_floor_gap
+        sit,
+        artifact=artifact,
+        success_floor_gap=situation.success_floor_gap,
+        run_pass_balance=situation.run_pass_balance,
     )
 
     return Recommendation(
