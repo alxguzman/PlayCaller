@@ -13,11 +13,13 @@ GET  /teams     valid team codes (for frontend dropdowns)
 POST /recommend full ranked call sheet for one game situation
 """
 
+import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from src.model.evaluate import load_artifact
@@ -47,10 +49,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Let the React dev server (Phase 5) call this API from the browser.
+# Let the React dev server (Phase 5) call this API from the browser. In
+# production the frontend is served from this same origin (see the static
+# mount below), so CORS is a no-op there. ALLOWED_ORIGINS can override the
+# list for a split frontend/backend deploy.
+_default_origins = "http://localhost:5173,http://127.0.0.1:5173"
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=os.environ.get("ALLOWED_ORIGINS", _default_origins).split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -151,9 +157,12 @@ def trained_values(artifact, column):
     )
 
 
-@app.get("/")
+@app.get("/healthz")
 def health():
-    """Simple health check so you can verify the server is running."""
+    """Simple health check so you can verify the server is running.
+
+    Lives at /healthz (not /) because in production / serves the React app.
+    """
     return {
         "status": "ok",
         "message": "NFL Play Caller API is running",
@@ -281,3 +290,16 @@ def recommend(situation: GameSituation):
         best_epa=result["best_epa"],
         ranking=result["ranking"].to_dict(orient="records"),
     )
+
+
+# Serve the built React app (frontend/dist) from this same server, so the
+# whole project is one URL in production. Registered LAST so the API routes
+# above win; the mount only catches "/" and static asset paths. Guarded by
+# an existence check so local dev (no build) still starts fine.
+_DIST = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "frontend",
+    "dist",
+)
+if os.path.isdir(_DIST):
+    app.mount("/", StaticFiles(directory=_DIST, html=True), name="frontend")

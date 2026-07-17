@@ -1,0 +1,9 @@
+# Render Blueprint - lets Render set up the service from this repo directly.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: playcaller
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    autoDeploy: true

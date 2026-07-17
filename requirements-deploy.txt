@@ -1,0 +1,11 @@
+# Runtime-only dependencies for the deployed API (see Dockerfile).
+# The full requirements.txt also has training/plotting libs (matplotlib,
+# seaborn, shap) and Phase 4's anthropic - none needed just to serve.
+fastapi==0.121.0
+uvicorn==0.38.0
+pydantic==2.12.4
+pandas==3.0.2
+numpy==2.4.4
+scikit-learn==1.7.2
+xgboost==3.1.2
+joblib==1.5.2

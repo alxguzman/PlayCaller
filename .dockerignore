@@ -1,0 +1,13 @@
+# Keep the build context small and fast. The API doesn't need training data.
+.git/
+venv/
+**/__pycache__/
+*.pyc
+.env
+data/
+notebooks/
+docs/
+frontend/node_modules/
+frontend/dist/
+model/*.png
+*.md

@@ -17,7 +17,10 @@ data/processed/*
 
 # Trained model binary - rebuilt with `python -m src.model.train`.
 # The evaluation charts (*.png) ARE committed so they show on GitHub.
+# Exception: the deployed model IS committed (1.2 MB) so hosts can serve it
+# without needing the multi-hundred-MB training data.
 model/*.joblib
+!model/play_success_model.joblib
 
 # Editor / OS noise
 .vscode/

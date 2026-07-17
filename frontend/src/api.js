@@ -1,7 +1,13 @@
 // Thin wrapper around the FastAPI backend (src/api/main.py).
 // Start it with:  uvicorn src.api.main:app --reload
 
-const API_BASE = "http://127.0.0.1:8000";
+// In production the frontend is served by the same FastAPI server, so an
+// empty base means "call this same origin". In `npm run dev` the Vite server
+// runs on :5173 while the API runs on :8000, so fall back to the local API.
+// Override either with VITE_API_BASE (e.g. a split frontend/backend deploy).
+const API_BASE =
+  import.meta.env.VITE_API_BASE ??
+  (import.meta.env.DEV ? "http://127.0.0.1:8000" : "");
 
 async function getJSON(path, init) {
   const res = await fetch(`${API_BASE}${path}`, init);
