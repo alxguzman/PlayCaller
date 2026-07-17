@@ -14,8 +14,16 @@ functions also return figures so notebook 04 can display them inline.)
 import os
 
 import joblib
-import matplotlib.pyplot as plt
 import numpy as np
+
+# matplotlib is only needed for the plotting/eval functions below, not for
+# load_artifact() which the API imports at startup. Keep it optional so the
+# slim production image (see requirements-deploy.txt) can import this module
+# without it. plt stays defined (None) so the plot functions still resolve.
+try:
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError:
+    plt = None
 import pandas as pd
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
