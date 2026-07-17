@@ -7,3 +7,17 @@ services:
     plan: free
     healthCheckPath: /healthz
     autoDeploy: true
+    # Secrets live in Render's dashboard, NOT in git (.env is gitignored
+    # and never deployed). `sync: false` = Render prompts for the value
+    # when the blueprint is applied and stores it server-side only.
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: APP_USERNAME
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      # Random per-service token-signing key, generated once by Render -
+      # keeps everyone signed in across deploys/restarts.
+      - key: APP_SECRET_KEY
+        generateValue: true
