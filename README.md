@@ -23,10 +23,17 @@ Built with: pandas · XGBoost · FastAPI · React · Claude API
    and GET `/options` list the legal values for dropdowns.
 4. **AI play caller** *(Phase 4)* — Claude turns the numbers into a
    coordinator-style explanation: *"3rd & 7, their secondary has been
-   leaking EPA for a month — air it out."*
+   leaking EPA for a month — air it out."* POST `/explain` re-runs the
+   recommendation, hands Claude the call sheet + both teams' form ranks,
+   and returns 2–4 headset-style sentences (`src/ai/play_caller.py`).
+   Identical situations are served from an in-process cache so demo
+   clicks don't burn API credits. Needs `ANTHROPIC_API_KEY` in `.env`.
 5. **Dashboard** *(Phase 5)* — React frontend (`frontend/`): set the
    situation, watch the formation diagram and ranked call sheet react
-   live. `npm run dev` in `frontend/` with the API running.
+   live. `npm run dev` in `frontend/` with the API running. The app sits
+   behind a simple sign-in (POST `/login`, credentials from
+   `APP_USERNAME`/`APP_PASSWORD` in `.env`) so strangers can't spend the
+   Claude tokens — `/explain` rejects requests without a valid session.
 
 ## How the recommender picks a play: floor, ceiling, and balance
 
@@ -73,7 +80,7 @@ floor.**
 In practice: on 1st-and-10 the play-action deep shot still wins
 legitimately (its conversion odds are competitive). On 2nd-and-3 the
 balance credit lifts an outside run over a marginally-higher-EPA short
-pass. On 3rd-and-1 the deep shot gets blocked by the floor and the QB
+pass. On 3rd-and-1 the deep shot gets bl0ocked by the floor and the QB
 sneak wins; on 3rd-and-8 the run credit is zero, so it stays a pass. The
 full ranking table always shows every play with both model numbers and a
 `meets_floor` flag, so nothing is hidden.
@@ -153,8 +160,10 @@ python -m src.model.train      # train + save the model artifact
 python -m src.model.evaluate   # metrics + confusion matrix + SHAP charts
 python -m src.model.recommend  # demo recommendation (3rd & 7, KC vs BUF)
 
+.\venv\Scripts\Activate.ps1 
 uvicorn src.api.main:app --reload   # start the API, docs at /docs
 
+# in seperate terminal run
 cd frontend    #activate frontend 
 npm run dev
 
@@ -173,5 +182,5 @@ npm run dev
 - [x] Phase 1 — data pipeline + exploration notebooks
 - [x] Phase 2 — XGBoost model + recommender (`src/model/`)
 - [x] Phase 3 — FastAPI backend (`src/api/`)
-- [ ] Phase 4 — Claude AI play caller (`src/ai/`)
+- [x] Phase 4 — Claude AI play caller (`src/ai/`) + sign-in gate
 - [x] Phase 5 — React dashboard (`frontend/`)

@@ -1,4 +1,4 @@
-export default function Header() {
+export default function Header({ username, onSignOut }) {
   return (
     <header className="header">
       <div className="brand">
@@ -17,6 +17,12 @@ export default function Header() {
           History
         </button>
       </nav>
+      <div className="header-user">
+        <span className="muted">{username}</span>
+        <button className="signout-btn" onClick={onSignOut}>
+          Sign out
+        </button>
+      </div>
     </header>
   );
 }

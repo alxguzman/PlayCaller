@@ -8,20 +8,24 @@ Then open http://127.0.0.1:8000/docs for the interactive Swagger UI.
 
 Endpoints
 ---------
-GET  /          health check
+GET  /healthz   health check
 GET  /teams     valid team codes (for frontend dropdowns)
 POST /recommend full ranked call sheet for one game situation
+POST /login     username/password -> bearer token (see src/api/auth.py)
+POST /explain   Claude's coordinator-style explanation (login required)
 """
 
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
+from src.ai.play_caller import CLAUDE_MODEL, PlayCallerError, explain_recommendation
+from src.api.auth import check_credentials, create_token, require_auth
 from src.model.evaluate import load_artifact
 from src.model.recommend import RUN_PASS_BALANCE, SUCCESS_FLOOR_GAP, recommend_play
 
@@ -135,6 +139,22 @@ class Recommendation(BaseModel):
     ranking: list[RankedPlay]
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    username: str
+
+
+class Explanation(BaseModel):
+    explanation: str
+    best_call: str
+    model: str
+
+
 def get_artifact():
     if state["artifact"] is None:
         raise HTTPException(
@@ -241,14 +261,9 @@ def offense_ranks():
     ])
 
 
-@app.post("/recommend", response_model=Recommendation)
-def recommend(situation: GameSituation):
-    """
-    Rank every play concept for one game situation.
-
-    The pick = highest expected EPA among plays whose success probability
-    clears the floor (within `success_floor_gap` of the safest option).
-    """
+def _run_recommendation(situation: GameSituation):
+    """Validate a situation and run the recommender. Shared by /recommend
+    and /explain so both endpoints agree on the same call."""
     artifact = get_artifact()
 
     # Unknown team codes would silently fall back to league-median form,
@@ -283,13 +298,63 @@ def recommend(situation: GameSituation):
         success_floor_gap=situation.success_floor_gap,
         run_pass_balance=situation.run_pass_balance,
     )
+    result["ranking"] = result["ranking"].to_dict(orient="records")
+    return result
 
+
+@app.post("/recommend", response_model=Recommendation)
+def recommend(situation: GameSituation):
+    """
+    Rank every play concept for one game situation.
+
+    The pick = highest expected EPA among plays whose success probability
+    clears the floor (within `success_floor_gap` of the safest option).
+    """
+    result = _run_recommendation(situation)
     return Recommendation(
         best_call=result["best_call"],
         best_prob=result["best_prob"],
         best_epa=result["best_epa"],
-        ranking=result["ranking"].to_dict(orient="records"),
+        ranking=result["ranking"],
     )
+
+
+@app.post("/login", response_model=LoginResponse)
+def login(body: LoginRequest):
+    """Trade the .env username/password for a 12-hour bearer token."""
+    if not check_credentials(body.username, body.password):
+        raise HTTPException(status_code=401, detail="Wrong username or password.")
+    return LoginResponse(token=create_token(body.username), username=body.username)
+
+
+@app.post("/explain", response_model=Explanation)
+def explain(situation: GameSituation, user: str = Depends(require_auth)):
+    """
+    Claude's coordinator-style explanation of the recommended call.
+
+    Login-required: this is the one endpoint that spends Claude API tokens,
+    so it sits behind the sign-in (see src/api/auth.py).
+    """
+    result = _run_recommendation(situation)
+
+    # Hand Claude the same team-form ranks the dashboard shows.
+    off = _rank_table(get_artifact()["off_form_lookup"], [
+        ("overall", "off_epa_per_play", False),
+        ("pass", "off_epa_pass", False),
+        ("run", "off_epa_run", False),
+    ])["ranks"].get(situation.posteam)
+    de = _rank_table(get_artifact()["def_form_lookup"], [
+        ("overall", "def_epa_allowed_per_play", True),
+        ("pass", "def_epa_allowed_pass", True),
+        ("run", "def_epa_allowed_run", True),
+    ])["ranks"].get(situation.defteam)
+
+    try:
+        text = explain_recommendation(result["situation"], result, off, de)
+    except PlayCallerError as e:
+        raise HTTPException(status_code=e.status, detail=str(e))
+
+    return Explanation(explanation=text, best_call=result["best_call"], model=CLAUDE_MODEL)
 
 
 # Serve the built React app (frontend/dist) from this same server, so the

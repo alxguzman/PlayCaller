@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchDefenseRanks, fetchOffenseRanks, fetchOptions, fetchRecommendation } from "./api.js";
+import {
+  clearSession,
+  fetchDefenseRanks,
+  fetchOffenseRanks,
+  fetchOptions,
+  fetchRecommendation,
+  getToken,
+  getUsername,
+} from "./api.js";
 import Header from "./components/Header.jsx";
+import Login from "./components/Login.jsx";
 import SituationPanel from "./components/SituationPanel.jsx";
 import RecommendationCard from "./components/RecommendationCard.jsx";
+import CoachExplanation from "./components/CoachExplanation.jsx";
 import Field from "./components/Field.jsx";
 import PlayComparison from "./components/PlayComparison.jsx";
 import CallSheet from "./components/CallSheet.jsx";
@@ -105,6 +115,8 @@ function loadHistory() {
 }
 
 export default function App() {
+  // null = not signed in -> show the login page instead of the dashboard.
+  const [user, setUser] = useState(() => (getToken() ? getUsername() : null));
   const [situation, setSituation] = useState(DEFAULT_SITUATION);
   const [options, setOptions] = useState(null); // { teams, formations, personnel }
   const [defense, setDefense] = useState(null); // { n_teams, ranks }
@@ -136,12 +148,16 @@ export default function App() {
       .catch(() => setDefense(null));
   }, []);
 
-  useEffect(loadOptions, [loadOptions]);
+  // Don't hit the API until someone is signed in - the login page
+  // shouldn't fire requests in the background.
+  useEffect(() => {
+    if (user) loadOptions();
+  }, [user, loadOptions]);
 
   // Re-ask the model whenever the situation changes (debounced so
   // dragging a slider doesn't fire a request per pixel).
   useEffect(() => {
-    if (!options) return;
+    if (!options || !user) return;
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setLoading(true);
@@ -154,7 +170,7 @@ export default function App() {
         .finally(() => setLoading(false));
     }, 350);
     return () => clearTimeout(debounceRef.current);
-  }, [situation, options]);
+  }, [situation, options, user]);
 
   const saveToHistory = useCallback(() => {
     if (!rec) return;
@@ -186,6 +202,15 @@ export default function App() {
     setHistory([]);
   }, []);
 
+  const signOut = useCallback(() => {
+    clearSession();
+    setUser(null);
+  }, []);
+
+  if (!user) {
+    return <Login onSignIn={setUser} />;
+  }
+
   // What the field actually shows: pinned values win, otherwise the
   // recommender's defaults (its natural-home formation, a typical box).
   const fieldFormation =
@@ -197,7 +222,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header />
+      <Header username={user} onSignOut={signOut} />
       {apiError && (
         <div className="api-banner">
           <span>
@@ -220,6 +245,11 @@ export default function App() {
             rec={rec}
             loading={loading}
             onSave={saveToHistory}
+          />
+          <CoachExplanation
+            rec={rec}
+            situation={toRequest(situation)}
+            onAuthError={signOut}
           />
           <Field
             situation={situation}
