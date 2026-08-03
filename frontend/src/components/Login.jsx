@@ -34,10 +34,9 @@ export default function Login({ onSignIn }) {
       <div className="login-bg" aria-hidden="true" />
       <form className="panel login-card" onSubmit={submit}>
         <div className="login-brand">
-          <div className="brand-logo">🏈</div>
+          <img className="brand-logo" src="/football.png" alt="AI Play Pilot logo" />
           <div>
-            <div className="brand-name">AI Play Caller</div>
-            <div className="brand-tag">Smarter calls. Better results.</div>
+            <div className="brand-name">AI Play Pilot</div>
           </div>
         </div>
         <h2 className="panel-title">Sign in</h2>

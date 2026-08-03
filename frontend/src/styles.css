@@ -47,7 +47,7 @@ body {
   display: flex;
   align-items: center;
   gap: 32px;
-  padding: 14px 4px;
+  padding: 8px 4px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 14px;
 }
@@ -59,7 +59,9 @@ body {
 }
 
 .brand-logo {
-  font-size: 26px;
+  width: 45px;
+  height: 45px;
+  object-fit: contain;
   filter: drop-shadow(0 0 6px rgba(43, 255, 142, 0.5));
 }
 
@@ -146,14 +148,14 @@ body {
 .center-col {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 5px;
   min-width: 0;
 }
 
 .right-col {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
 }
 
