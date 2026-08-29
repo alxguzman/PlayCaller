@@ -1,6 +1,19 @@
-import { conceptLabel, conceptType } from "../lib/labels.js";
+import {
+  conceptLabel,
+  conceptType,
+  downDistanceLabel,
+  fieldPositionLabel,
+} from "../lib/labels.js";
 
 const runOrPass = (fam) => (conceptType(fam) === "run" ? "run" : "pass");
+
+/** "3rd & 7 · BUF 35" for one logged snap. Rows saved before the
+ *  situation was recorded fall back to down & distance alone. */
+function situationLabel(r) {
+  const dd = downDistanceLabel(r.down, r.distance, r.yardline_100);
+  if (r.yardline_100 == null || !r.posteam) return dd;
+  return `${dd} · ${fieldPositionLabel(r.yardline_100, r.posteam, r.defteam || "OPP")}`;
+}
 
 /**
  * Running model-vs-coach tally for one live game.
@@ -84,15 +97,32 @@ export default function LiveScorecard({ rows }) {
           <ul className="live-log">
             {rows.slice(0, 12).map((r) => (
               <li key={r.playId} className="live-log-row">
-                <span className={`live-log-badge ${r.coach_family === null ? "na" : r.agreed ? "hit" : "miss"}`}>
+                <span
+                  className={`live-log-badge ${
+                    r.coach_family === null ? "na" : r.agreed ? "hit" : "miss"
+                  }`}
+                >
                   {r.coach_family === null ? "–" : r.agreed ? "✓" : "✗"}
                 </span>
-                <span>
-                  model: <b>{conceptLabel(r.model_call)}</b> · coach:{" "}
-                  <b>{r.coach_concept ? conceptLabel(r.coach_concept) : "ungradable"}</b> ·{" "}
-                  {r.yards >= 0 ? "+" : ""}
-                  {r.yards} yds
-                </span>
+                <div className="live-log-body">
+                  <div className="live-log-top">
+                    <span className="live-log-situation">{situationLabel(r)}</span>
+                    <span className="live-log-calls">
+                      model <b>{conceptLabel(r.model_call)}</b>
+                      <span className="muted"> vs coach </span>
+                      <b>
+                        {r.coach_concept ? conceptLabel(r.coach_concept) : "ungradable"}
+                      </b>
+                    </span>
+                    <span
+                      className={`live-log-yards ${r.success ? "green" : "red"}`}
+                    >
+                      {r.yards >= 0 ? "+" : ""}
+                      {r.yards} yds
+                    </span>
+                  </div>
+                  {r.text && <div className="live-log-text">{r.text}</div>}
+                </div>
               </li>
             ))}
           </ul>

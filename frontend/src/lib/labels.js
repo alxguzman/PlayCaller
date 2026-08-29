@@ -40,6 +40,16 @@ export function personnelLabel(code) {
   return `${code} — ${rb} RB · ${te} TE · ${wr} WR`;
 }
 
+const ORDINALS = ["", "1st", "2nd", "3rd", "4th"];
+
+/** "3rd & 7" - or "3rd & Goal" when the line to gain is the end zone. */
+export function downDistanceLabel(down, distance, yardline100) {
+  const d = ORDINALS[down] ?? `${down}th`;
+  const toGo =
+    yardline100 != null && distance >= yardline100 ? "Goal" : distance;
+  return `${d} & ${toGo}`;
+}
+
 /** "BUF 35" / "Midfield" / "NYJ 38" from yards-to-opponent-end-zone. */
 export function fieldPositionLabel(yardline100, posteam, defteam) {
   if (yardline100 === 50) return "Midfield";

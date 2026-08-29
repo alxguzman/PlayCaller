@@ -1164,8 +1164,8 @@ input[type="range"] {
 .live-log-row {
   display: flex;
   gap: 10px;
-  align-items: baseline;
-  padding: 5px 0;
+  align-items: flex-start;
+  padding: 7px 0;
   border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
@@ -1174,6 +1174,43 @@ input[type="range"] {
   flex: 0 0 18px;
   text-align: center;
   font-weight: 700;
+  line-height: 1.5;
+}
+
+.live-log-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.live-log-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  align-items: baseline;
+}
+
+.live-log-situation {
+  flex: 0 0 auto;
+  min-width: 118px;
+  font-family: var(--mono);
+  color: var(--muted);
+}
+
+.live-log-calls {
+  flex: 1 1 auto;
+}
+
+.live-log-yards {
+  margin-left: auto;
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.live-log-text {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
 }
 
 .live-log-badge.hit {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchLiveGames, fetchLiveGameState, fetchRecommendation } from "../api.js";
-import { conceptLabel } from "../lib/labels.js";
+import { conceptLabel, downDistanceLabel, fieldPositionLabel } from "../lib/labels.js";
 import RecommendationCard from "./RecommendationCard.jsx";
 import CallSheet from "./CallSheet.jsx";
 import LiveScorecard from "./LiveScorecard.jsx";
@@ -70,7 +70,6 @@ function GamePicker({ games, error, onPick }) {
 }
 
 function SituationStrip({ game, situation, reason }) {
-  const ordinal = ["", "1st", "2nd", "3rd", "4th"];
   return (
     <div className="panel live-strip">
       <div className="live-score">
@@ -86,8 +85,13 @@ function SituationStrip({ game, situation, reason }) {
       {situation ? (
         <div className="live-situation">
           <b>{situation.posteam}</b> ball ·{" "}
-          {ordinal[situation.down]} & {situation.ydstogo} · {situation.yardline_100} yds to
-          the end zone
+          {downDistanceLabel(situation.down, situation.ydstogo, situation.yardline_100)}{" "}
+          · ball on{" "}
+          {fieldPositionLabel(
+            situation.yardline_100,
+            situation.posteam,
+            situation.defteam
+          )}
         </div>
       ) : (
         <div className="live-situation muted">{reason || "Waiting for the next snap…"}</div>
@@ -147,12 +151,18 @@ export default function LiveView() {
         );
         if (!fresh) return prev;
         pendingRef.current = null;
+        // Store the full situation with the row: the scorecard is
+        // reloaded from localStorage, so it can't depend on live state.
+        const defteam =
+          [d.game.home.abbr, d.game.away.abbr].find((t) => t !== fresh.posteam) ?? "";
         const row = {
           playId: fresh.id,
           ts: Date.now(),
           posteam: fresh.posteam,
+          defteam,
           down: fresh.down,
           distance: fresh.distance,
+          yardline_100: fresh.yardline_100,
           model_call: pending.rec.best_call,
           model_family: family(pending.rec.best_call),
           coach_concept: fresh.concept, // null = ungradable (sack/scramble)
