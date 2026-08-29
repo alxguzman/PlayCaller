@@ -270,3 +270,83 @@ matched exactly (24 inside / 14 outside / 10 off-tackle); pass families
 61 vs 59. The rigorous scorecard remains `recommendation_agreement()` on
 nflverse data after each weekly refresh - the live tab is the demo, the
 weekly eval is the number to quote.
+
+---
+
+## Experiment: call-credibility prior (`call-credibility` branch)
+
+Symptom: only **7%** exact agreement with real coaches on the 2025
+holdout, driven almost entirely by one concept - the model recommended
+`pa_deep_pass` on **61%** of snaps vs coaches' 2.8%. That's the
+documented selection-bias inflation (PA deep shots only appear in the
+data when coaches liked the conditions) expressing itself as an
+unrealistic call mix. With call mixes that different, agreement was
+mathematically capped around ~27%.
+
+Fix - the general form of the run/pass balance idea: a third model in the
+artifact, a **coach-call model** (multiclass XGBoost,
+P(concept | situation), situation-only features - no call or outcome
+columns), and a ranking-only credit
+`CALL_CREDIBILITY * log P(coach calls this here)`. Plays coaches rarely
+call in a situation pay a penalty that a genuinely large EPA edge can
+still overcome; displayed EPA stays honest. `RUN_PASS_BALANCE` drops
+0.70 -> 0.35 alongside, because the coach prior already encodes run
+tendencies (keeping 0.70 double-counted and pushed run share to 48%+).
+
+Design note: the prior must be **concept-level, not family-level** - a
+family-level prior (pa_deep + deep sharing one probability) lets
+pa_deep_pass ride deep_pass's credibility and it stayed at 50% of
+recommendations. Known cost of concept-level: within a family the prior
+tilts toward the most common variant (inside_run gains, off_tackle_run
+drops to ~1.5% of recs).
+
+Bug caught during validation: the first call model included
+`defenders_in_box`, and a NaN box (the normal API-time state) sent it
+down a wildly miscalibrated missing-value branch - a 3rd-and-7 went from
+96% pass (correct, on real charted rows) to 73% run, surfacing as an
+inside-run recommendation in the module demo. Root cause is conceptual,
+not just numeric: the box count is the DEFENSE's pre-snap read of the
+offense, so it predicts the call circularly. It's excluded from the call
+model's features (`CALL_EXCLUDED_COLS` in train.py); the success/EPA
+models keep it, where it's a legitimate difficulty modifier.
+
+### Results (same 31,922-play 2025 holdout; classifier/regressor untouched - ranking only)
+
+| Metric                     | Baseline (bal .70, cred 0) | New (bal .35, cred .20) |
+| -------------------------- | -------------------------- | ----------------------- |
+| Exact agreement            | 7.0%                       | 25.3%                   |
+| Family agreement           | 13.3%                      | 28.2%                   |
+| pa_deep_pass rec share     | 61.1%                      | 30.3% (coaches 2.8%)    |
+| Recommended run share      | 33.8%                      | 39.0% (coaches 42.4%)   |
+| Run rec on 3rd/4th-&-7+    | 1.1%                       | 1.1% (coaches 8.7%)     |
+| Agreed-plays EPA/play      | +0.236                     | +0.111                  |
+| Disagreed-plays EPA/play   | +0.055                     | +0.054                  |
+
+Sweep grid: lambda in {0.03...0.35} x balance in {0, 0.25, 0.35, 0.45,
+0.70}. Higher lambda keeps raising agreement (33% at 0.35) but the
+agreed-vs-other EPA edge shrinks toward zero and flips negative by
+lambda=0.35 with balance 0.70 - past that point the recommender is just
+mimicking coaches and agreement stops selecting better plays. 0.20/0.35
+keeps a clearly positive edge (+0.057 exact, +0.089 family-level) with a
+call mix in the realistic range.
+
+The agreed-EPA drop (+0.236 -> ~+0.11) is the same regression-to-the-mean
+dynamic as previous ranking changes, at larger scale: the agreed set grew
+from 2,230 to ~8,100 plays and now includes ordinary
+inside-runs-on-1st-down instead of only the model's pet spots. The edge
+over disagreed plays stays positive, which is the signal that matters.
+
+Spot checks (KC vs BUF): 3rd-&-1 stays a sneak, 3rd-&-12 stays a deep
+pass, 3rd-&-8 flips pa_short_pass -> short_pass (more realistic),
+1st-&-10 / 2nd-&-3 / red-zone 2nd-&-7 flip from off-tackle to inside run
+(the within-family tilt above).
+
+### Verdict: MERGED
+
+Directly fixes the pa_deep_pass dominance that motivated it, agreement
+nearly quadruples into the realistic range, run share lands just shy of
+real coaches, and the model's preferences still carry positive signal.
+Classifier and EPA regressor are untouched. Remaining limits: off_tackle
+runs nearly vanish from recommendations (within-family flattening), and
+the prior is behavioral, not strategic - the principled next step is
+still WP-aware ranking for clock situations.

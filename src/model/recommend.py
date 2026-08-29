@@ -44,11 +44,13 @@ SNEAK_MAX_YDSTOGO = 2
 # The credit is scaled by how CREDIBLE a run is in the situation, so it
 # never recommends a run when you obviously must pass (3rd-and-long): a run
 # stays a real threat through ~1st/2nd-and-medium, but on 3rd/4th down only
-# in short yardage. With the default the recommender's 2025-holdout run
-# share is ~34% (vs coaches' 42% - deliberately a touch more pass-leaning,
-# as the analytics consensus prescribes) and it runs on 3rd/4th-and-7+ just
-# 0.7% of the time (coaches 8.7%). See docs/experiments.md.
-RUN_PASS_BALANCE = 0.70
+# in short yardage. 0.35 (was 0.70): the call-credibility prior below also
+# pulls the run share up (coaches' run tendencies are part of what the
+# coach-call model learns), so keeping 0.70 double-counted and pushed the
+# run share past real coaches'. The pair (0.35, 0.20) lands the
+# 2025-holdout run share at ~39% (coaches 42%) with runs on 3rd/4th-and-7+
+# at 1.3% (coaches 8.7%). See docs/experiments.md.
+RUN_PASS_BALANCE = 0.35
 
 # Yards-to-go over which a run stops being a credible call, by down. The
 # credit decays linearly to 0 across this many yards (downs 1-2 keep runs
@@ -64,6 +66,22 @@ def run_credibility(down, ydstogo):
     an obvious passing down."""
     horizon = _RUN_HORIZON_EARLY if (down or 1) <= 2 else _RUN_HORIZON_LATE
     return max(0.0, min(1.0, 1.0 - max(0, ydstogo - 1) / horizon))
+
+# The call-credibility prior (the general form of the run/pass balance
+# idea). The EPA estimates for plays coaches almost never call are the
+# most selection-biased - pa_deep_pass is called on ~3% of real snaps
+# precisely because coaches pick their spots, which inflates its
+# historical EPA and made it 61% of our recommendations. So the ranking
+# gets a credit of CALL_CREDIBILITY * log P(coach calls this | situation),
+# from the coach-call model trained alongside the other two. Rare-here
+# calls pay a penalty that a genuinely large EPA edge can still overcome;
+# the displayed expected_epa stays the model's honest number. 0.0 = off.
+# 0.20 chosen by the 2025-holdout sweep (docs/experiments.md): pa_deep
+# share 61% -> 30%, exact agreement 7% -> 26%, agreed-vs-other EPA edge
+# stays positive. A concept-level (not family-level) prior is essential -
+# a family prior lets pa_deep_pass ride deep_pass's credibility.
+CALL_CREDIBILITY = 0.20
+_MIN_CALL_PROB = 1e-3  # log floor so a ~0 probability can't veto outright
 
 # The floor-and-ceiling blend: the EPA regressor picks the play (ceiling),
 # but only among plays whose success probability is within this many
@@ -162,6 +180,7 @@ def recommend_play(
     artifact=None,
     success_floor_gap=SUCCESS_FLOOR_GAP,
     run_pass_balance=RUN_PASS_BALANCE,
+    call_credibility=CALL_CREDIBILITY,
 ):
     """
     Rank every play concept for one game situation.
@@ -184,6 +203,10 @@ def recommend_play(
         value of staying unpredictable. 0.0 = pure EPA (pass-heavy); higher
         pulls the run share up. Orthogonal to success_floor_gap (that's the
         conversion-risk axis; this is the play-type axis).
+    call_credibility : float
+        Weight on the log-probability of the coach-call model (ranking
+        only): plays coaches rarely call in this situation pay a penalty,
+        countering their selection-biased EPA. 0.0 = off.
 
     Returns
     -------
@@ -225,6 +248,18 @@ def recommend_play(
             situation.get("down", 1), situation.get("ydstogo", 10)
         )
         ranking["_rank_score"] = ranking["expected_epa"] + credit * is_run
+
+        # Call-credibility credit: log P(coach calls this here), from the
+        # coach-call model. Every candidate row shares the same situation
+        # (only the call columns differ, and the call model can't see
+        # those), so one prediction covers all concepts.
+        call_model = artifact.get("call_model")
+        if call_model is not None and call_credibility > 0:
+            call_X = X.iloc[[0]][artifact["call_features"]]
+            call_p = call_model.predict_proba(call_X)[0]  # ordered like concepts
+            ranking["_rank_score"] += call_credibility * np.log(
+                np.clip(call_p, _MIN_CALL_PROB, None)
+            )
         sort_col = "_rank_score"
     else:
         sort_col = "success_prob"

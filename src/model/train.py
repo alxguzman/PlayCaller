@@ -145,6 +145,61 @@ def split_by_season(X, y, meta):
     )
 
 
+# Situation-only feature filter for the coach-call model: the play call
+# itself (concept/formation/personnel one-hots) and anything derived from
+# it (the box-x-call interactions) must be excluded - this model predicts
+# WHAT COACHES CALL from the situation alone. defenders_in_box is also
+# out: the box count is the DEFENSE's pre-snap read of the offense (they
+# stack it when they expect run), so it predicts the call circularly -
+# and at recommendation time it's usually unknown (NaN), which sent the
+# model down a wildly miscalibrated missing-value branch (96% pass
+# flipped to 73% run on a 3rd-and-7).
+CALL_EXCLUDED_PREFIXES = ("play_concept_", "formation_", "personnel_")
+CALL_EXCLUDED_COLS = {"box_x_run", "box_x_pass", "defenders_in_box"}
+
+
+def call_feature_columns(all_columns):
+    """The subset of training columns the coach-call model may see."""
+    return [
+        c for c in all_columns
+        if not c.startswith(CALL_EXCLUDED_PREFIXES) and c not in CALL_EXCLUDED_COLS
+    ]
+
+
+def train_call_model(X_train, X_val, concepts_train, concepts_val, classes):
+    """
+    Model 3 (multiclass): P(coach calls each concept | situation).
+
+    This is deliberately the thing the recommender is NOT: a model of
+    coaching behavior. It powers the call-credibility prior in
+    recommend.py - a ranking-only credit that keeps the recommender from
+    living on plays coaches almost never call (whose EPA estimates are
+    the most selection-biased). See docs/experiments.md.
+    """
+    features = call_feature_columns(X_train.columns)
+    y_train = pd.Categorical(concepts_train, categories=classes).codes
+    y_val = pd.Categorical(concepts_val, categories=classes).codes
+
+    call_model = xgb.XGBClassifier(
+        objective="multi:softprob",
+        n_estimators=300,
+        early_stopping_rounds=20,
+        learning_rate=0.1,
+        max_depth=6,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        eval_metric="mlogloss",
+        random_state=42,
+    )
+    print("\nTraining coach-call model (multiclass, takes a few minutes) ...")
+    call_model.fit(
+        X_train[features], y_train,
+        eval_set=[(X_val[features], y_val)], verbose=50,
+    )
+    print(f"Best iteration: {call_model.best_iteration} trees")
+    return call_model, features
+
+
 def build_team_form_lookup(df):
     """
     Snapshot each team's most recent rolling form, so the recommender can
@@ -221,14 +276,25 @@ def train():
     epa_model.fit(X_train, epa_train, eval_set=[(X_val, epa_val)], verbose=50)
     print(f"Best iteration: {epa_model.best_iteration} trees")
 
+    # --- Model 3: coach-call model (same split, situation-only features) --
+    concept_classes = sorted(df["play_concept"].dropna().unique())
+    concept_meta = meta["play_concept"]
+    call_model, call_features = train_call_model(
+        X_train, X_val,
+        concept_meta.loc[X_train.index], concept_meta.loc[X_val.index],
+        concept_classes,
+    )
+
     off_lookup, def_lookup = build_team_form_lookup(df)
 
     artifact = {
         "model": model,
         "epa_model": epa_model,
+        "call_model": call_model,               # P(coach's call | situation)
+        "call_features": call_features,         # its (situation-only) columns
         "feature_columns": list(X.columns),     # exact training column order
         "numeric_defaults": X_train.median(numeric_only=True),  # fill for unspecified inputs
-        "concept_classes": sorted(df["play_concept"].dropna().unique()),
+        "concept_classes": concept_classes,
         "formation_classes": sorted(df["formation"].dropna().unique()),
         "off_form_lookup": off_lookup,
         "def_form_lookup": def_lookup,
