@@ -11,7 +11,7 @@ Built with: pandas · XGBoost · FastAPI · React · Claude API
 1. **Data pipeline** — 3 seasons of nflverse play-by-play data, cleaned to
    ~150k real run/pass decisions, enriched with rolling 4-week team-form
    features (offensive/defensive EPA, success rates) with no data leakage.
-2. **Model** — two XGBoost models with the play call as an input: a
+2. **Model** — three XGBoost models. Two take the play call as an input: a
    classifier for P(success) and a regressor for expected EPA. Scoring
    the same situation once per play concept (10 candidate calls) turns
    prediction into recommendation (see "How the recommender picks a
@@ -48,10 +48,10 @@ Built with: pandas · XGBoost · FastAPI · React · Claude API
    rigorous week-after comparison still comes from
    `recommendation_agreement()` on nflverse data (true EPA and labels).
 
-## How the recommender picks a play: floor, ceiling, and balance
+## How the recommender picks a play: floor, ceiling, and priors
 
 Two models score every candidate play call for the same situation, and
-a balance prior corrects a blind spot they share. Three pieces:
+two priors correct blind spots they share. Four pieces:
 
 - **The ceiling — EPA regressor.** Candidates are ranked by *expected
   points added*: how much a call is worth on average. This is the right
@@ -79,35 +79,51 @@ a balance prior corrects a blind spot they share. Three pieces:
   defenses stop respecting it and your pass EPA collapses. The model
   can't see this — it scores each play against the defense's *average*
   posture — so we add an EPA credit to run concepts for **ranking only**
-  (`run_pass_balance`, the **balance dial**, default 0.70; the displayed
+  (`run_pass_balance`, the **balance dial**, default 0.35; the displayed
   EPA stays the model's honest number). The credit is scaled by how
   *credible* a run is at that down and distance: full in short yardage,
   decaying to zero by ~1st/2nd-and-long and much faster on 3rd/4th down,
-  so it never recommends a run when you obviously must pass. With the
-  default, the recommender's run share on the 2025 holdout is ~34% (real
-  coaches: 42%) and it runs on 3rd/4th-and-7+ just 0.7% of the time.
+  so it never recommends a run when you obviously must pass.
 
-**The pick = the highest balance-adjusted EPA among plays that clear the
+- **The credibility prior — coach-call model.** The floor and the balance
+  credit still left the recommender calling play-action deep shots on
+  61% of snaps (real coaches: 3%), because selection bias inflates the
+  EPA of exactly those rarely-called plays. So a third model learns
+  P(concept | situation) from what coaches actually call — situation
+  features only, no play call, no outcome — and the ranking gets a credit
+  of `CALL_CREDIBILITY × log P(coach calls this here)` (default 0.20).
+  Plays coaches almost never call in a spot pay a penalty a genuinely
+  large EPA edge can still overcome. This is *not* the recommender
+  copying coaches: the credit is a soft tiebreak on top of the EPA
+  ranking, and coach agreement stays selective (agreed plays average
+  +0.111 EPA vs +0.054 for the rest). With both priors, the holdout run
+  share is 39% (coaches 42%), PA-deep drops to 30%, and exact agreement
+  rises from 7% to 25%.
+
+**The pick = the highest prior-adjusted EPA among plays that clear the
 floor.**
 
-In practice: on 1st-and-10 the play-action deep shot still wins
-legitimately (its conversion odds are competitive). On 2nd-and-3 the
-balance credit lifts an outside run over a marginally-higher-EPA short
-pass. On 3rd-and-1 the deep shot gets bl0ocked by the floor and the QB
-sneak wins; on 3rd-and-8 the run credit is zero, so it stays a pass. The
-full ranking table always shows every play with both model numbers and a
-`meets_floor` flag, so nothing is hidden.
+In practice (KC vs BUF): 1st-and-10 and 2nd-and-3 come back inside run —
+the balance and credibility credits together lift a run over a
+marginally-higher-EPA pass. On 3rd-and-1 the deep shot is blocked by the
+floor and the QB sneak wins. On 3rd-and-8 the run credit is zero and the
+credibility prior favors the call coaches actually make there, so it's a
+short pass; on 3rd-and-12 it stays a pass too. The full ranking table
+always shows every play with both model numbers and a `meets_floor` flag,
+so nothing is hidden.
 
 Two extra guardrails: QB sneaks are never recommended beyond 2 yards to
 go, and trick plays never take the top slot (they're only called when
 coaches expect them to work, so their stats are flattered — the same
 selection bias in its purest form).
 
-The two dials are independent axes, settable per request and live in the
-dashboard: `success_floor_gap` is the **conversion-risk** axis ("how much
-risk for upside?") and `run_pass_balance` is the **play-type** axis ("how
-predictable am I willing to be?"). See `docs/experiments.md` for the
-holdout numbers behind the defaults.
+Two of the knobs are per-request API dials on independent axes:
+`success_floor_gap` is the **conversion-risk** axis ("how much risk for
+upside?", also the dashboard's risk slider) and `run_pass_balance` is the
+**play-type** axis ("how predictable am I willing to be?").
+`CALL_CREDIBILITY` is a tuned constant in `recommend.py` rather than a
+dial — it's a bias correction, not a taste setting. See
+`docs/experiments.md` for the holdout numbers behind all three defaults.
 
 ```
 PlayCaller/

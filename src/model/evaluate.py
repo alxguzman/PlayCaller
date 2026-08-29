@@ -183,25 +183,30 @@ def calibration(artifact=None, n_bins=10, show=False):
     return fig
 
 
-def model_recommendations(X_situations, artifact):
+def model_recommendations(X_situations, artifact, call_credibility=None):
     """
     What the model would have called for every row of X_situations
     (one-hot encoded plays, same columns as training).
 
     Vectorized version of recommend_play's ranking policy - the
-    floor-and-ceiling blend plus the run/pass balance credit and the
-    guardrails (no sneaks beyond 2 yards, trick plays never top-ranked) -
-    so it grades the exact policy the API ships. Falls back to pure
-    success_prob if the artifact has no EPA regressor.
+    floor-and-ceiling blend plus the run/pass balance and call-credibility
+    credits and the guardrails (no sneaks beyond 2 yards, trick plays
+    never top-ranked) - so it grades the exact policy the API ships.
+    Falls back to pure success_prob if the artifact has no EPA regressor.
 
     Returns a numpy array of concept names, one per row.
     """
     from src.model.recommend import (
+        CALL_CREDIBILITY,
         RUN_PASS_BALANCE,
         SUCCESS_FLOOR_GAP,
+        _MIN_CALL_PROB,
         run_credibility,
     )
     from src.model.train import RUN_CONCEPTS
+
+    if call_credibility is None:
+        call_credibility = CALL_CREDIBILITY
 
     model = artifact["model"]
     epa_model = artifact.get("epa_model")
@@ -234,6 +239,16 @@ def model_recommendations(X_situations, artifact):
         down = X_situations["down"].to_numpy()
         cred = np.array([run_credibility(d, t) for d, t in zip(down, ydstogo)])
         credit = RUN_PASS_BALANCE * cred[:, None] * is_run[None, :]
+
+        # Call-credibility credit (see recommend.py): rarely-called plays
+        # pay a penalty proportional to log P(coach calls this here).
+        call_model = artifact.get("call_model")
+        if call_model is not None and call_credibility > 0:
+            call_p = call_model.predict_proba(X_situations[artifact["call_features"]])
+            credit = credit + call_credibility * np.log(
+                np.clip(call_p, _MIN_CALL_PROB, None)
+            )
+
         floor = probs.max(axis=1, keepdims=True) - SUCCESS_FLOOR_GAP
         score = np.where(probs >= floor, epas + credit, -np.inf)
     else:
