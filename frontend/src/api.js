@@ -55,6 +55,23 @@ export function fetchRecommendation(situation) {
   });
 }
 
+/* ---- live games (ESPN-powered, see src/api/live.py) --------------- */
+
+/** Today's NFL games: { games: [{id, short_name, state, detail, home, away}] } */
+export function fetchLiveGames() {
+  return getJSON("/live/games");
+}
+
+/** One game's live state: { game, situation, reason, last_play_id, recent_plays } */
+export function fetchLiveGameState(id) {
+  return getJSON(`/live/games/${id}`);
+}
+
+/** Week-by-week model-vs-coach summary: { available, season, weeks, totals } */
+export function fetchSeasonScorecard() {
+  return getJSON("/season-scorecard");
+}
+
 /* ---- sign-in ------------------------------------------------------
    The token gates /explain (the endpoint that spends Claude credits).
    It lives in localStorage so a refresh doesn't log you out; the server

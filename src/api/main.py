@@ -15,6 +15,7 @@ POST /login     username/password -> bearer token (see src/api/auth.py)
 POST /explain   Claude's coordinator-style explanation (login required)
 """
 
+import json
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -26,6 +27,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from src.ai.play_caller import CLAUDE_MODEL, PlayCallerError, explain_recommendation
 from src.api.auth import check_credentials, create_token, require_auth
+from src.api.live import router as live_router
 from src.model.evaluate import load_artifact
 from src.model.recommend import RUN_PASS_BALANCE, SUCCESS_FLOOR_GAP, recommend_play
 
@@ -261,6 +263,25 @@ def offense_ranks():
     ])
 
 
+@app.get("/season-scorecard")
+def season_scorecard():
+    """
+    The week-by-week model-vs-coach summary for the test season, written
+    by `python -m src.model.season_log` to model/season_scorecard.json
+    (committed alongside the weekly retrain so deploys ship it).
+    """
+    path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "model",
+        "season_scorecard.json",
+    )
+    if not os.path.exists(path):
+        return {"available": False, "season": None, "weeks": [], "totals": None}
+    with open(path) as f:
+        data = json.load(f)
+    return {"available": True, **data}
+
+
 def _run_recommendation(situation: GameSituation):
     """Validate a situation and run the recommender. Shared by /recommend
     and /explain so both endpoints agree on the same call."""
@@ -356,6 +377,10 @@ def explain(situation: GameSituation, user: str = Depends(require_auth)):
 
     return Explanation(explanation=text, best_call=result["best_call"], model=CLAUDE_MODEL)
 
+
+# Live-game routes (/live/games, /live/games/{id}) - ESPN-powered data
+# for the Live tab. Registered before the static mount below so they win.
+app.include_router(live_router)
 
 # Serve the built React app (frontend/dist) from this same server, so the
 # whole project is one URL in production. Registered LAST so the API routes

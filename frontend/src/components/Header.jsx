@@ -1,4 +1,4 @@
-export default function Header({ username, onSignOut }) {
+export default function Header({ username, onSignOut, view, onViewChange, liveNow }) {
   return (
     <header className="header">
       <div className="brand">
@@ -8,7 +8,25 @@ export default function Header({ username, onSignOut }) {
         </div>
       </div>
       <nav className="nav">
-        <button className="nav-tab active">▶ Live Caller</button>
+        <button
+          className={`nav-tab${view === "sim" ? " active" : ""}`}
+          onClick={() => onViewChange("sim")}
+        >
+          ▶ Play Caller
+        </button>
+        <button
+          className={`nav-tab${view === "live" ? " active" : ""}${liveNow ? " live-on" : ""}`}
+          onClick={() => onViewChange("live")}
+          title={liveNow ? "Games are live right now!" : undefined}
+        >
+          ● Live Games
+        </button>
+        <button
+          className={`nav-tab${view === "season" ? " active" : ""}`}
+          onClick={() => onViewChange("season")}
+        >
+          ▦ Season
+        </button>
       </nav>
       <div className="header-user">
         <span className="muted">{username}</span>

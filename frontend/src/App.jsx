@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   clearSession,
   fetchDefenseRanks,
+  fetchLiveGames,
   fetchOffenseRanks,
   fetchOptions,
   fetchRecommendation,
@@ -18,6 +19,8 @@ import PlayComparison from "./components/PlayComparison.jsx";
 import CallSheet from "./components/CallSheet.jsx";
 import RankPanel from "./components/RankPanel.jsx";
 import HistoryStrip from "./components/HistoryStrip.jsx";
+import LiveView from "./components/LiveView.jsx";
+import SeasonView from "./components/SeasonView.jsx";
 
 /** Build the three Overall/Pass/Run rows a RankPanel renders. */
 function rankRows(ranks) {
@@ -117,6 +120,8 @@ function loadHistory() {
 export default function App() {
   // null = not signed in -> show the login page instead of the dashboard.
   const [user, setUser] = useState(() => (getToken() ? getUsername() : null));
+  const [view, setView] = useState("sim"); // "sim" | "live" | "season"
+  const [liveNow, setLiveNow] = useState(false); // any game in progress?
   const [situation, setSituation] = useState(DEFAULT_SITUATION);
   const [options, setOptions] = useState(null); // { teams, formations, personnel }
   const [defense, setDefense] = useState(null); // { n_teams, ranks }
@@ -153,6 +158,19 @@ export default function App() {
   useEffect(() => {
     if (user) loadOptions();
   }, [user, loadOptions]);
+
+  // Light scoreboard poll (server caches ESPN calls) so the Live Games
+  // tab can glow when a game is actually in progress.
+  useEffect(() => {
+    if (!user) return;
+    const check = () =>
+      fetchLiveGames()
+        .then((d) => setLiveNow(d.games.some((g) => g.state === "in")))
+        .catch(() => {});
+    check();
+    const t = setInterval(check, 60_000);
+    return () => clearInterval(t);
+  }, [user]);
 
   // Re-ask the model whenever the situation changes (debounced so
   // dragging a slider doesn't fire a request per pixel).
@@ -220,9 +238,30 @@ export default function App() {
   const fieldBox =
     situation.defenders_in_box === "" ? 7 : Number(situation.defenders_in_box);
 
+  if (view === "live" || view === "season") {
+    return (
+      <div className="app">
+        <Header
+          username={user}
+          onSignOut={signOut}
+          view={view}
+          onViewChange={setView}
+          liveNow={liveNow}
+        />
+        {view === "live" ? <LiveView /> : <SeasonView />}
+      </div>
+    );
+  }
+
   return (
     <div className="app">
-      <Header username={user} onSignOut={signOut} />
+      <Header
+        username={user}
+        onSignOut={signOut}
+        view={view}
+        onViewChange={setView}
+        liveNow={liveNow}
+      />
       {apiError && (
         <div className="api-banner">
           <span>

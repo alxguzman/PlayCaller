@@ -219,3 +219,54 @@ metric there can regress. Remaining limit: the prior is a hand-shaped
 down/distance taper, not win-probability-aware - it still can't call the
 "kill the clock" run to protect a Q4 lead. The knob is exposed in the
 API/UI (`run_pass_balance`, 0.0-1.0) alongside the risk dial.
+
+---
+
+## 2026 season prep: data refresh + retrain (Aug 28, 2026)
+
+Two workflow changes ahead of the 2026 season, plus a fresh baseline:
+
+1. **`python -m src.data.refresh`** now downloads the latest nflverse
+   files (pbp, FTN, participation for every season in its `SEASONS` list)
+   and rebuilds `pbp_features.csv`. nflverse republishes nightly during
+   the season. The weekly in-season routine (Tuesdays, after MNF lands):
+   refresh -> train -> evaluate -> commit the artifact -> push (Render
+   auto-deploys). The retrain is what refreshes the frozen
+   `off_form_lookup`/`def_form_lookup` rolling-form snapshots that live
+   recommendations depend on.
+2. **Season rollover constants** in `train.py`: `TEST_SEASON` /
+   `VAL_SEASON` / `VAL_WEEK_FROM` replace the hardcoded 2024/2025 split.
+   At 2026 kickoff flip to `TEST_SEASON=2026, VAL_SEASON=2025` and
+   retrain - 2025 moves fully into training and 2026 becomes the holdout.
+   Holdout numbers will be noisy until ~week 4.
+
+### New baseline (retrained on final 2025 nflverse data, 31,922 test plays)
+
+The committed June artifact was stale (its feature list predated the
+timeouts features in `NUMERIC_FEATURES`). Retrained clean; numbers are
+consistent with the run-pass-balance baseline above:
+
+| Metric                    | June artifact | Aug 28 retrain |
+| ------------------------- | ------------- | -------------- |
+| Classifier accuracy       | 0.597         | 0.595          |
+| ROC-AUC                   | 0.621         | 0.622          |
+| Log-loss                  | 0.665         | 0.665          |
+| EPA RMSE (baseline 1.3386)| 1.3297        | 1.3277         |
+| EPA R-squared             | 0.0133        | 0.0162         |
+| Agreement rate            | 7.2%          | 7.0%           |
+| Agreed-plays EPA/play     | +0.249        | +0.236         |
+| Disagreed-plays EPA/play  | +0.054        | +0.055         |
+
+### Live tab (model vs coach, in real time)
+
+The Live tab polls ESPN's public JSON feed (~10s) during games,
+auto-fills the situation, asks `/recommend` before each snap, then
+grades the model against the coach's actual call. Honesty notes baked
+into the UI: grading is at the play-FAMILY level (ESPN play text can't
+reveal play action, so `pa_*` folds into its base concept) and "success"
+is the 40/60/100 yardage rule, not the training target (EPA > 0).
+Heuristic check vs nflverse labels (GB @ CLE, 2025 wk3): run directions
+matched exactly (24 inside / 14 outside / 10 off-tackle); pass families
+61 vs 59. The rigorous scorecard remains `recommendation_agreement()` on
+nflverse data after each weekly refresh - the live tab is the demo, the
+weekly eval is the number to quote.

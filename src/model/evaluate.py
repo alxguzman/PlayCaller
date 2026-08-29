@@ -1,7 +1,8 @@
 """
 evaluate.py
 -----------
-Evaluates the trained model on the held-out 2025 season:
+Evaluates the trained model on the held-out test season (TEST_SEASON in
+train.py):
   - accuracy, ROC-AUC, log-loss
   - confusion matrix
   - SHAP values: which features actually drive the predictions?
@@ -33,7 +34,14 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from src.model.train import MODEL_DIR, MODEL_PATH, load_processed, prepare_data, split_by_season
+from src.model.train import (
+    MODEL_DIR,
+    MODEL_PATH,
+    TEST_SEASON,
+    load_processed,
+    prepare_data,
+    split_by_season,
+)
 
 
 def load_artifact():
@@ -46,7 +54,7 @@ def load_artifact():
 
 
 def get_test_set():
-    """Rebuild the held-out 2025 test set exactly as train.py defined it."""
+    """Rebuild the held-out test set exactly as train.py defined it."""
     df = load_processed()
     X, y, meta = prepare_data(df)
     *_, X_test, y_test = split_by_season(X, y, meta)
@@ -66,11 +74,15 @@ def evaluate(artifact=None, show=False):
     model = artifact["model"]
     X_test, y_test = get_test_set()
 
+    if len(y_test) == 0:
+        print(f"No {TEST_SEASON} plays in the dataset yet - nothing to evaluate.")
+        return None
+
     proba = model.predict_proba(X_test)[:, 1]   # P(success) per play
     pred = (proba >= 0.5).astype(int)
 
     print("=" * 50)
-    print("EVALUATION - held-out 2025 season")
+    print(f"EVALUATION - held-out {TEST_SEASON} season")
     print("=" * 50)
     print(f"Plays      : {len(y_test):,}")
     print(f"Accuracy   : {accuracy_score(y_test, pred):.3f}")
@@ -83,7 +95,7 @@ def evaluate(artifact=None, show=False):
     ConfusionMatrixDisplay(cm, display_labels=["fail", "success"]).plot(
         ax=ax, colorbar=False
     )
-    ax.set_title("Confusion matrix - 2025 test season")
+    ax.set_title(f"Confusion matrix - {TEST_SEASON} test season")
     fig.tight_layout()
 
     if show:
@@ -93,7 +105,7 @@ def evaluate(artifact=None, show=False):
 
 def evaluate_epa_model(artifact=None):
     """
-    Headline metrics for the EPA regressor on the 2025 test season.
+    Headline metrics for the EPA regressor on the held-out test season.
 
     Expectations check: R-squared will look tiny (~0.05). That's normal -
     play-level EPA is dominated by randomness no pre-snap model can see.
@@ -111,9 +123,13 @@ def evaluate_epa_model(artifact=None):
 
     df = load_processed()
     X, y, meta = prepare_data(df)
-    is_test = meta["season"] == 2025
+    is_test = meta["season"] == TEST_SEASON
     X_test = X[is_test]
     epa_test = meta.loc[is_test, "epa"]
+
+    if len(epa_test) == 0:
+        print(f"No {TEST_SEASON} plays in the dataset yet - nothing to evaluate.")
+        return
 
     pred = epa_model.predict(X_test)
     rmse = mean_squared_error(epa_test, pred) ** 0.5
@@ -122,7 +138,7 @@ def evaluate_epa_model(artifact=None):
     ) ** 0.5
 
     print("=" * 50)
-    print("EPA REGRESSOR - held-out 2025 season")
+    print(f"EPA REGRESSOR - held-out {TEST_SEASON} season")
     print("=" * 50)
     print(f"RMSE          : {rmse:.4f}")
     print(f"Baseline RMSE : {baseline_rmse:.4f} (always predict the mean)")
@@ -144,6 +160,11 @@ def calibration(artifact=None, n_bins=10, show=False):
     artifact = artifact or load_artifact()
     model = artifact["model"]
     X_test, y_test = get_test_set()
+
+    if len(y_test) == 0:
+        print(f"No {TEST_SEASON} plays in the dataset yet - nothing to evaluate.")
+        return None
+
     proba = model.predict_proba(X_test)[:, 1]
 
     frac_pos, mean_pred = calibration_curve(y_test, proba, n_bins=n_bins)
@@ -153,7 +174,7 @@ def calibration(artifact=None, n_bins=10, show=False):
     ax.plot(mean_pred, frac_pos, marker="o", color="steelblue", label="model")
     ax.set_xlabel("Predicted success probability")
     ax.set_ylabel("Actual success rate")
-    ax.set_title("Calibration - 2025 test season")
+    ax.set_title(f"Calibration - {TEST_SEASON} test season")
     ax.legend()
     fig.tight_layout()
 
@@ -162,23 +183,18 @@ def calibration(artifact=None, n_bins=10, show=False):
     return fig
 
 
-def recommendation_agreement(artifact=None, show=False):
+def model_recommendations(X_situations, artifact):
     """
-    Grade the model AS A RECOMMENDER, not a predictor.
+    What the model would have called for every row of X_situations
+    (one-hot encoded plays, same columns as training).
 
-    For every 2025 play we compute what the model would have called in
-    that exact situation (same teams, same field position, same
-    formation). Then we split plays into "coach agreed with the model"
-    vs "coach called something else" and compare actual outcomes.
+    Vectorized version of recommend_play's ranking policy - the
+    floor-and-ceiling blend plus the run/pass balance credit and the
+    guardrails (no sneaks beyond 2 yards, trick plays never top-ranked) -
+    so it grades the exact policy the API ships. Falls back to pure
+    success_prob if the artifact has no EPA regressor.
 
-    If agreed-plays show higher EPA and success rate, the model's
-    preferences carry real signal. Caveat: agreement isn't random
-    (selection bias again), so this is evidence, not proof.
-
-    Uses the same ranking policy as recommend_play - the floor-and-ceiling
-    blend: pick the highest expected EPA (regressor) among plays whose
-    success probability (classifier) is within SUCCESS_FLOOR_GAP of the
-    safest option. Falls back to pure success_prob if no regressor.
+    Returns a numpy array of concept names, one per row.
     """
     from src.model.recommend import (
         RUN_PASS_BALANCE,
@@ -187,37 +203,25 @@ def recommendation_agreement(artifact=None, show=False):
     )
     from src.model.train import RUN_CONCEPTS
 
-    artifact = artifact or load_artifact()
     model = artifact["model"]
     epa_model = artifact.get("epa_model")
-
-    df = load_processed()
-    X, y, meta = prepare_data(df)
-    is_test = (meta["season"] == 2025).to_numpy()
-    X_test = X[is_test]
-    actual_concept = meta.loc[is_test, "play_concept"].to_numpy()
-    actual_epa = meta.loc[is_test, "epa"].to_numpy()
-    actual_success = y[is_test].to_numpy()
-
     concepts = artifact["concept_classes"]
     concept_cols = [f"play_concept_{c}" for c in concepts]
 
     # Score every play once per candidate concept: zero out the play_concept
     # one-hot columns, switch on one concept at a time, predict with BOTH
     # models (success prob for the floor, expected EPA for the ranking).
-    probs = np.zeros((len(X_test), len(concepts)))
-    epas = np.zeros((len(X_test), len(concepts)))
+    probs = np.zeros((len(X_situations), len(concepts)))
+    epas = np.zeros((len(X_situations), len(concepts)))
     for j, concept in enumerate(concepts):
-        X_c = X_test.copy()
+        X_c = X_situations.copy()
         X_c[concept_cols] = False
         X_c[f"play_concept_{concept}"] = True
         probs[:, j] = model.predict_proba(X_c)[:, 1]
         if epa_model is not None:
             epas[:, j] = epa_model.predict(X_c)
 
-    # Same guardrails as recommend_play: no sneaks beyond 2 yards to go,
-    # and trick plays are never the recommendation.
-    ydstogo = X_test["ydstogo"].to_numpy()
+    ydstogo = X_situations["ydstogo"].to_numpy()
     if "qb_sneak" in concepts:
         probs[ydstogo > 2, concepts.index("qb_sneak")] = -np.inf
     if "trick_play" in concepts:
@@ -225,12 +229,9 @@ def recommendation_agreement(artifact=None, show=False):
 
     if epa_model is not None:
         # Floor-and-ceiling: eligible = within the gap of the safest play;
-        # recommendation = highest balance-adjusted EPA among eligible. The
-        # run/pass balance credit (runs only, scaled by run credibility at
-        # each play's down & distance) matches recommend_play so the test
-        # grades the same policy the API ships.
+        # recommendation = highest balance-adjusted EPA among eligible.
         is_run = np.array([c in RUN_CONCEPTS for c in concepts])
-        down = X_test["down"].to_numpy()
+        down = X_situations["down"].to_numpy()
         cred = np.array([run_credibility(d, t) for d, t in zip(down, ydstogo)])
         credit = RUN_PASS_BALANCE * cred[:, None] * is_run[None, :]
         floor = probs.max(axis=1, keepdims=True) - SUCCESS_FLOOR_GAP
@@ -238,7 +239,39 @@ def recommendation_agreement(artifact=None, show=False):
     else:
         score = probs
 
-    recommended = np.array(concepts)[score.argmax(axis=1)]
+    return np.array(concepts)[score.argmax(axis=1)]
+
+
+def recommendation_agreement(artifact=None, show=False):
+    """
+    Grade the model AS A RECOMMENDER, not a predictor.
+
+    For every test-season play we compute what the model would have called in
+    that exact situation (same teams, same field position, same
+    formation). Then we split plays into "coach agreed with the model"
+    vs "coach called something else" and compare actual outcomes.
+
+    If agreed-plays show higher EPA and success rate, the model's
+    preferences carry real signal. Caveat: agreement isn't random
+    (selection bias again), so this is evidence, not proof. And note what
+    this does NOT claim: when the coach called something else, we never
+    observe how the model's play would have gone (the counterfactual),
+    so disagreement is never counted as the model being wrong.
+    """
+    artifact = artifact or load_artifact()
+
+    df = load_processed()
+    X, y, meta = prepare_data(df)
+    is_test = (meta["season"] == TEST_SEASON).to_numpy()
+    if is_test.sum() == 0:
+        print(f"No {TEST_SEASON} plays in the dataset yet - nothing to evaluate.")
+        return None, None
+    X_test = X[is_test]
+    actual_concept = meta.loc[is_test, "play_concept"].to_numpy()
+    actual_epa = meta.loc[is_test, "epa"].to_numpy()
+    actual_success = y[is_test].to_numpy()
+
+    recommended = model_recommendations(X_test, artifact)
     agreed = recommended == actual_concept
 
     summary = pd.DataFrame({
@@ -252,7 +285,7 @@ def recommendation_agreement(artifact=None, show=False):
     }, index=["coach agreed with model", "coach called something else"])
 
     print("=" * 60)
-    print("RECOMMENDER EVALUATION - 2025 season")
+    print(f"RECOMMENDER EVALUATION - {TEST_SEASON} season")
     print("=" * 60)
     print(f"Agreement rate: {agreed.mean():.1%} of plays\n")
     print(summary.round(3).to_string())
@@ -303,7 +336,11 @@ def shap_summary(artifact=None, sample_size=2000, show=False):
 
 
 if __name__ == "__main__":
+    # Each function returns None when the test season has no plays yet
+    # (e.g. right after the season rollover, before week 1 is played).
     fig_cm = evaluate()
+    if fig_cm is None:
+        raise SystemExit(0)
     fig_cm.savefig(os.path.join(MODEL_DIR, "confusion_matrix.png"), dpi=150)
 
     evaluate_epa_model()

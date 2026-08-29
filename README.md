@@ -34,6 +34,19 @@ Built with: pandas · XGBoost · FastAPI · React · Claude API
    behind a simple sign-in (POST `/login`, credentials from
    `APP_USERNAME`/`APP_PASSWORD` in `.env`) so strangers can't spend the
    Claude tokens — `/explain` rejects requests without a valid session.
+6. **Live games** *(Phase 6)* — during a real NFL game, the Live tab
+   polls ESPN's public JSON feed (`src/live/espn.py`, GET `/live/games`
+   and `/live/games/{id}`), auto-fills the current situation, shows the
+   model's call *before* the snap, then grades it against what the coach
+   actually ran — a running model-vs-coach scorecard (family-level
+   agreement, success rate and yards when they agreed vs not). Play
+   descriptions are classified into the model's concepts by text
+   heuristics (validated against nflverse labels: run directions match
+   exactly; play action isn't detectable live, so play-action variants
+   grade as their base family). `python -m src.live.replay <event_id>`
+   replays any finished game through the same pipeline for testing. The
+   rigorous week-after comparison still comes from
+   `recommendation_agreement()` on nflverse data (true EPA and labels).
 
 ## How the recommender picks a play: floor, ceiling, and balance
 
@@ -127,24 +140,51 @@ pip install -r requirements.txt
 
 ### 2. Data files
 
-Play-by-play files (already in place):
-- `data/raw/play_by_play_2023.csv.gz` ✓
-- `data/raw/play_by_play_2024.csv.gz` ✓
-- `data/raw/play_by_play_2025.csv.gz` ✓
+One command downloads everything from nflverse (play-by-play, FTN
+charting, participation) and rebuilds the processed dataset:
 
-FTN charting (play-action/screen/RPO/formation flags; already in place):
-- `data/raw/ftn_charting_2023.csv` ✓ (from https://github.com/nflverse/nflverse-data/releases/tag/ftn_charting)
-- `data/raw/ftn_charting_2024.csv` ✓
-- `data/raw/ftn_charting_2025.csv` ✓
+```powershell
+python -m src.data.refresh
+```
 
-Participation data (formation/personnel/coverage; already in place):
-- `data/raw/participation_2023.csv` ✓
-- `data/raw/participation_2024.csv` ✓
-- `data/raw/participation_2025.csv` ✓
-- (from https://github.com/nflverse/nflverse-data/releases/tag/pbp_participation — note the `pbp_participation` tag; files are named `pbp_participation_YYYY.csv`)
+Seasons are listed in `SEASONS` at the top of `src/data/refresh.py` —
+edit that list once a year. Files that nflverse hasn't published yet
+(e.g. the new season before week 1, or FTN/participation for recent
+seasons) are noted and skipped; the pipeline treats them as optional.
 
-The pipeline treats FTN and participation files as optional — missing
-seasons just leave those columns empty.
+**Weekly in-season routine** (Tuesdays, after Monday Night Football has
+landed in nflverse's nightly build):
+
+```powershell
+python -m src.data.refresh     # latest play-by-play
+python -m src.model.train      # retrain (also refreshes team-form lookups)
+python -m src.model.evaluate   # sanity-check the holdout metrics
+python -m src.model.season_log # rebuild the per-play model-vs-coach log
+# then commit model/play_success_model.joblib and push - Render redeploys
+```
+
+`season_log` writes `data/processed/season_log_<year>.csv` — every play of
+the test season with the model's call (made from pre-snap info only) next
+to the coach's actual call and the real outcome, plus a week-by-week
+agreement table. Since the model is deterministic and never sees the
+coach's call, regenerating this after the fact gives the exact same
+recommendations it would have made live. Interpretation caveat: when the
+coach called something else, the model's play never ran — those rows are
+a comparison, not proof of who was right.
+
+It also writes `model/season_scorecard.json` (committed with the weekly
+retrain), which GET `/season-scorecard` serves and the dashboard's
+**Season tab** renders — the week-by-week table in the app. The Live
+Games tab glows red whenever a game is in progress.
+
+The retrain matters for live use: each team's rolling 4-week form is
+frozen into the artifact at train time, so a weekly retrain is what
+keeps recommendations current.
+
+**Season rollover** (once, at kickoff of a new season): in
+`src/model/train.py` bump `TEST_SEASON` and `VAL_SEASON` (e.g. 2026/2025),
+add the year to `SEASONS` in `refresh.py`, and retrain. The finished
+season moves into training and the new one becomes the holdout.
 
 ### 3. Run the notebooks in order
 
@@ -155,10 +195,12 @@ and 04 (trains the model and demos the play caller).
 ### 4. Terminal shortcuts
 
 ```powershell
-python -m src.data.features    # rebuild data/processed/pbp_features.csv
+python -m src.data.refresh     # download latest nflverse data + rebuild features
+python -m src.data.features    # rebuild data/processed/pbp_features.csv only
 python -m src.model.train      # train + save the model artifact
 python -m src.model.evaluate   # metrics + confusion matrix + SHAP charts
 python -m src.model.recommend  # demo recommendation (3rd & 7, KC vs BUF)
+python -m src.live.replay      # list today's games (add an id to replay one)
 
 .\venv\Scripts\Activate.ps1 
 uvicorn src.api.main:app --reload   # start the API, docs at /docs

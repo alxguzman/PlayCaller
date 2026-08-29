@@ -12,7 +12,7 @@ recommendation time we score the same situation once per candidate call
 and rank them: "in this spot, against this defense, a play-action deep
 shot succeeds 48% of the time, an inside run 41%..."
 
-Train/test split is BY SEASON (train 2023-24, test 2025). Random
+Train/test split is BY SEASON (see the ROLLOVER constants below). Random
 splitting time-series data leaks information: plays from the same game
 would land in both train and test.
 
@@ -32,6 +32,13 @@ MODEL_DIR = os.path.join(PROJECT_ROOT, "model")
 MODEL_PATH = os.path.join(MODEL_DIR, "play_success_model.joblib")
 
 TARGET = "success"
+
+# --- SEASON ROLLOVER: change these three lines once per year -------------
+# At 2026 kickoff: TEST_SEASON = 2026, VAL_SEASON = 2025 (then retrain -
+# 2025 moves fully into training). See docs/experiments.md.
+TEST_SEASON = 2025    # held out until evaluation
+VAL_SEASON = 2024     # late weeks of this season used for early stopping
+VAL_WEEK_FROM = 15    # first week of VAL_SEASON that goes to validation
 
 # Situation features: everything here is knowable BEFORE the snap.
 # Outcome columns (epa, yards_gained, air_yards...) must never appear -
@@ -122,13 +129,13 @@ def prepare_data(df):
 
 def split_by_season(X, y, meta):
     """
-    Temporal split:
-      train      = 2023 + 2024 weeks 1-14
-      validation = 2024 weeks 15+   (for early stopping)
-      test       = 2025             (never touched until evaluation)
+    Temporal split (seasons set by the ROLLOVER constants up top):
+      train      = everything before VAL_SEASON wk VAL_WEEK_FROM
+      validation = VAL_SEASON weeks VAL_WEEK_FROM+   (for early stopping)
+      test       = TEST_SEASON                       (never touched until evaluation)
     """
-    is_test = meta["season"] == 2025
-    is_val = (meta["season"] == 2024) & (meta["week"] >= 15)
+    is_test = meta["season"] == TEST_SEASON
+    is_val = (meta["season"] == VAL_SEASON) & (meta["week"] >= VAL_WEEK_FROM)
     is_train = ~is_test & ~is_val
 
     return (
@@ -176,9 +183,9 @@ def train():
     X, y, meta = prepare_data(df)
     X_train, y_train, X_val, y_val, X_test, y_test = split_by_season(X, y, meta)
 
-    print(f"Train: {len(X_train):,} plays (2023 + 2024 wk1-14)")
-    print(f"Valid: {len(X_val):,} plays (2024 wk15+, for early stopping)")
-    print(f"Test : {len(X_test):,} plays (2025, held out)")
+    print(f"Train: {len(X_train):,} plays (before {VAL_SEASON} wk{VAL_WEEK_FROM})")
+    print(f"Valid: {len(X_val):,} plays ({VAL_SEASON} wk{VAL_WEEK_FROM}+, for early stopping)")
+    print(f"Test : {len(X_test):,} plays ({TEST_SEASON}, held out)")
     print(f"Features: {X.shape[1]} columns after one-hot encoding")
 
     model = xgb.XGBClassifier(
