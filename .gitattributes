@@ -1,0 +1,9 @@
+# GitHub's language bar counts raw bytes, and a saved .ipynb is mostly
+# embedded output - rendered tables and base64 chart images (~87% of the
+# notebook bytes here). That made "Jupyter Notebook" 78% of this repo
+# while the actual source is Python and React.
+#
+# linguist-documentation keeps the notebooks fully visible and rendered on
+# GitHub (they're part of the project's story) but leaves them out of the
+# language statistics, so the bar reflects the code that was written.
+*.ipynb linguist-documentation
