@@ -26,6 +26,16 @@ def _espn_call(fn, *args):
     except urllib.error.HTTPError as e:
         if e.code == 404:
             raise HTTPException(status_code=404, detail="Game not found.")
+        if e.code in (401, 403):
+            # ESPN filters by headers and by client IP; cloud/datacenter
+            # ranges get blocked even with browser-like headers. Nothing
+            # the user can fix, so say so plainly instead of "HTTP 403".
+            raise HTTPException(
+                status_code=502,
+                detail="ESPN is blocking requests from this server, so live "
+                "game data isn't available here. The rest of the app "
+                "(play caller, season scorecard) works normally.",
+            )
         raise HTTPException(status_code=502, detail=f"ESPN returned HTTP {e.code}.")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid game id.")

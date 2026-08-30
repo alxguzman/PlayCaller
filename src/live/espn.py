@@ -47,6 +47,23 @@ CONCEPT_FAMILY = {
 _cache = {}  # url -> (fetched_at, parsed_json)
 _cache_lock = threading.Lock()
 
+# ESPN filters on request headers: a custom User-Agent ("playcaller/1.0")
+# gets a flat 403, and a bare "Mozilla/5.0" is enough from a home IP but
+# not from a datacenter one like Render's. These are the headers a real
+# browser sends when the espn.com scoreboard page fetches this same
+# endpoint - same public data, just asked for the way the site asks.
+_BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.espn.com/nfl/scoreboard",
+    "Origin": "https://www.espn.com",
+    "Connection": "keep-alive",
+}
+
 
 def fetch_json(url, ttl=8):
     """
@@ -61,8 +78,7 @@ def fetch_json(url, ttl=8):
         if hit and now - hit[0] < ttl:
             return hit[1]
 
-    # ESPN 403s unfamiliar User-Agents; a plain browser-style one is fine.
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    req = urllib.request.Request(url, headers=_BROWSER_HEADERS)
     with urllib.request.urlopen(req, timeout=20) as resp:
         data = json.load(resp)
 
