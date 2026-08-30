@@ -11,7 +11,7 @@ hand-rolled SVG, the bars/ring are CSS).
 
 ```powershell
 # 1. Start the API from the repo root (it serves the model):
-uvicorn src.api.main:app --reload
+python -m uvicorn src.api.main:app --reload
 
 # 2. Start the dev server from this frontend/ folder:
 npm install
