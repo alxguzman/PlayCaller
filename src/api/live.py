@@ -12,7 +12,7 @@ at most one request every few seconds no matter how many viewers.
 
 import urllib.error
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from src.live import espn
 
@@ -48,6 +48,40 @@ def live_games():
     """Today's NFL games (live, upcoming and final) from the scoreboard."""
     data = _espn_call(espn.get_scoreboard)
     return {"games": espn.parse_scoreboard(data)}
+
+
+# --- browser-relayed variants -------------------------------------------
+# ESPN rate-limits by IP and blocks shared cloud ranges, so the server
+# often can't fetch at all from a host like Render. These endpoints take
+# the raw ESPN payload that the VIEWER's browser fetched (their own IP,
+# their own quota - the same request espn.com makes) and run it through
+# the identical parser, so the concept-mapping logic stays in one place
+# instead of being duplicated in JavaScript. No outbound network here.
+
+@router.post("/parse/scoreboard")
+async def parse_scoreboard(request: Request):
+    """Parse a raw ESPN scoreboard payload relayed by the browser."""
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Body must be ESPN scoreboard JSON.")
+    try:
+        return {"games": espn.parse_scoreboard(data)}
+    except (AttributeError, TypeError, KeyError, ValueError):
+        raise HTTPException(status_code=422, detail="Unrecognized ESPN scoreboard payload.")
+
+
+@router.post("/parse/game")
+async def parse_game(request: Request):
+    """Parse a raw ESPN game-summary payload relayed by the browser."""
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Body must be ESPN summary JSON.")
+    try:
+        return espn.parse_game_state(data)
+    except (AttributeError, TypeError, KeyError, ValueError, IndexError):
+        raise HTTPException(status_code=422, detail="Unrecognized ESPN summary payload.")
 
 
 @router.get("/games/{event_id}")

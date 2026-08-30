@@ -55,16 +55,64 @@ export function fetchRecommendation(situation) {
   });
 }
 
-/* ---- live games (ESPN-powered, see src/api/live.py) --------------- */
+/* ---- live games (ESPN-powered, see src/api/live.py) ---------------
+
+   ESPN rate-limits by IP and blocks shared cloud ranges, so a deployed
+   server (Render's free tier) often gets a 403 while a laptop doesn't.
+   So: try the server first, and if it can't reach ESPN, fetch the feed
+   from THIS browser instead - the viewer's own IP and quota, the same
+   request espn.com itself makes - and POST the payload to the server to
+   be parsed. The parsing (play-concept mapping) stays in Python either
+   way; only the fetching moves. */
+
+const ESPN_SCOREBOARD =
+  "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
+const ESPN_SUMMARY =
+  "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=";
+
+// Flips to true the first time the server proves it can't reach ESPN, so
+// we don't pay a failing round trip on every poll after that.
+let relayViaBrowser = false;
+
+function postJSON(path, payload) {
+  return getJSON(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+async function espnJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`ESPN returned ${res.status}`);
+  return res.json();
+}
 
 /** Today's NFL games: { games: [{id, short_name, state, detail, home, away}] } */
-export function fetchLiveGames() {
-  return getJSON("/live/games");
+export async function fetchLiveGames() {
+  if (!relayViaBrowser) {
+    try {
+      return await getJSON("/live/games");
+    } catch {
+      relayViaBrowser = true;
+    }
+  }
+  return postJSON("/live/parse/scoreboard", await espnJSON(ESPN_SCOREBOARD));
 }
 
 /** One game's live state: { game, situation, reason, last_play_id, recent_plays } */
-export function fetchLiveGameState(id) {
-  return getJSON(`/live/games/${id}`);
+export async function fetchLiveGameState(id) {
+  if (!relayViaBrowser) {
+    try {
+      return await getJSON(`/live/games/${id}`);
+    } catch {
+      relayViaBrowser = true;
+    }
+  }
+  const raw = await espnJSON(ESPN_SUMMARY + encodeURIComponent(id));
+  // The summary carries boxscore/news/video/odds we never read; sending
+  // only what the parser uses keeps the upload small on a 10s poll.
+  return postJSON("/live/parse/game", { header: raw.header, drives: raw.drives });
 }
 
 /** Week-by-week model-vs-coach summary: { available, season, weeks, totals } */

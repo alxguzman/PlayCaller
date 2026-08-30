@@ -44,7 +44,16 @@ function GamePicker({ games, error, onPick }) {
   return (
     <div className="panel live-picker">
       <h2 className="panel-title">Pick a game</h2>
-      {error && <p className="muted">{error}</p>}
+      {error && (
+        <>
+          <p className="muted">{error}</p>
+          <p className="muted live-fineprint">
+            Live data comes from ESPN's public feed, which rate-limits by IP
+            and blocks shared cloud hosts. This tab always works when you run
+            the app locally during a game.
+          </p>
+        </>
+      )}
       {!error && games.length === 0 && (
         <p className="muted">No NFL games on today's scoreboard. Check back on game day!</p>
       )}
