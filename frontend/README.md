@@ -21,7 +21,7 @@ npm install
 npm run dev      # opens on http://localhost:5173
 ```
 
-The API checks nflverse for new play-by-play on startup and every six hours,
+The API checks nflverse for new play-by-play on startup and Tuesdays at 9:00 AM Pacific,
 then rebuilds the model and Season scorecard in the background. No data API
 key is required. For an immediate complete update, run this from the repo root:
 
@@ -31,8 +31,9 @@ python -m src.data.refresh --update-model
 
 Check `http://127.0.0.1:8000/data/status` for the loaded model's season, week,
 data coverage, and any refresh errors. The Live tab uses ESPN for in-game
-updates; nflverse supplies processed data after game days. Set
-`NFL_DATA_REFRESH_HOURS=0` in `.env` to disable background training.
+updates: the selected game refreshes every 10 seconds and the scoreboard
+every 30 seconds. Those polls are independent of the weekly nflverse refresh. Set
+`NFL_DATA_REFRESH_ENABLED=0` in `.env` to disable background training.
 
 ## What's where
 

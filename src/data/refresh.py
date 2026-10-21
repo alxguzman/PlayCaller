@@ -1,7 +1,7 @@
 """Sync nflverse's release API, rebuild features, and optionally retrain.
 
 Run ``python -m src.data.refresh --update-model`` for a complete update.
-The API checks this pipeline every six hours while it is running.
+The API checks on startup and each Tuesday at 09:00 Pacific while running.
 """
 
 import argparse

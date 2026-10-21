@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from src.ai.play_caller import CLAUDE_MODEL, PlayCallerError, explain_recommendation
-from src.api.data_refresh import DataRefreshWorker, refresh_hours
+from src.api.data_refresh import DataRefreshWorker, next_refresh_at, refresh_enabled, SCHEDULE_TIMEZONE
 from src.api.live import router as live_router
 from src.data.refresh import read_status
 from src.model.evaluate import load_artifact
@@ -206,7 +206,10 @@ def data_status():
     return {
         "source": "nflverse GitHub Releases API",
         "live_source": "ESPN",
-        "refresh_interval_hours": refresh_hours(),
+        "refresh_enabled": refresh_enabled(),
+        "refresh_schedule": "startup and Tuesday 09:00" if refresh_enabled() else "disabled",
+        "refresh_timezone": SCHEDULE_TIMEZONE,
+        "next_scheduled_refresh_at": next_refresh_at().isoformat() if refresh_enabled() else None,
         "refreshing": status.get("refreshing", False),
         "checked_at": status.get("checked_at"),
         "completed_at": status.get("completed_at"),

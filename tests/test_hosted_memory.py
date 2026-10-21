@@ -3,14 +3,14 @@ import io
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.api.data_refresh import DataRefreshWorker, refresh_hours
+from src.api.data_refresh import DataRefreshWorker, refresh_enabled
 from src.live import espn
 
 
 class HostedRefreshTests(unittest.TestCase):
     def test_render_without_blueprint_does_not_start_training(self):
         with patch.dict("os.environ", {"RENDER": "true"}, clear=True):
-            self.assertEqual(refresh_hours(), 0)
+            self.assertFalse(refresh_enabled())
             with patch("src.api.data_refresh.threading.Thread") as thread:
                 worker = DataRefreshWorker(MagicMock())
                 worker.start()
@@ -19,12 +19,16 @@ class HostedRefreshTests(unittest.TestCase):
 
     def test_local_default_still_refreshes(self):
         with patch.dict("os.environ", {}, clear=True):
-            self.assertEqual(refresh_hours(), 6)
+            self.assertTrue(refresh_enabled())
 
     def test_explicit_setting_wins(self):
-        for value in ("0", "12"):
-            with patch.dict("os.environ", {"RENDER": "true", "NFL_DATA_REFRESH_HOURS": value}, clear=True):
-                self.assertEqual(refresh_hours(), float(value))
+        for value in ("0", "1"):
+            with patch.dict("os.environ", {"RENDER": "true", "NFL_DATA_REFRESH_ENABLED": value}, clear=True):
+                self.assertEqual(refresh_enabled(), value == "1")
+
+    def test_legacy_render_opt_out_is_preserved(self):
+        with patch.dict("os.environ", {"NFL_DATA_REFRESH_HOURS": "0"}, clear=True):
+            self.assertFalse(refresh_enabled())
 
 
 class LiveCacheTests(unittest.TestCase):

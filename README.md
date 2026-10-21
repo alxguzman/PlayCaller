@@ -156,7 +156,7 @@ pip install -r requirements.txt
 ### 2. Current NFL data (automatic API sync)
 
 The backend checks the public **nflverse GitHub Releases API** at startup
-and every six hours while it is running. No API key is needed. It discovers
+and every Tuesday at **9:00 AM Pacific** (`America/Los_Angeles`) while running. No API key is needed. It discovers
 published seasons from 2023 through the current NFL season, downloads only
 changed assets, rebuilds features, retrains the model, and updates the Season
 tab scorecard. January/February remain part of the previous NFL season.
@@ -182,7 +182,12 @@ longer need to download CSVs or edit season constants manually.
 - `GET /data/status`: last source check, downloaded season/week/game date,
   refresh errors, and the **loaded model's** training time and data coverage.
 - `data/raw/refresh.log`: background download and training output.
-- `NFL_DATA_REFRESH_HOURS=6` in `.env`: check interval; `0` disables the worker.
+- `NFL_DATA_REFRESH_ENABLED=1` in `.env`: enable startup and Tuesday checks; `0` disables them.
+- `/data/status` includes the schedule, timezone, and next Tuesday check.
+- Startup always checks the source; unchanged data skips retraining. If the API
+  was off on Tuesday, the next startup checks for updates. The Tuesday time
+  follows Pacific daylight saving time. Legacy `NFL_DATA_REFRESH_HOURS=0`
+  still disables training; positive legacy values now use the Tuesday schedule.
 - `python -m src.data.refresh`: refresh data/features without retraining.
 - `python -m src.data.refresh --skip-rebuild`: refresh only the raw cache.
 
@@ -194,7 +199,9 @@ published, the most recent available season remains in use. Source schedule:
 https://nflreadr.nflverse.com/articles/nflverse_data_schedule.html
 
 **During games:** the Live tab continues to use ESPN's public JSON API for
-scores, situations, and recent play-by-play. The nflverse refresh supplies
+scores, situations, and recent play-by-play. In the Live tab, the selected
+game refreshes every 10 seconds and the scoreboard every 30 seconds; these
+polls run independently of the weekly model update. The nflverse refresh supplies
 EPA and charted features for modeling; it is not a real-time snap feed.
 
 Training automatically holds out the newest season in the data and uses late
@@ -212,7 +219,7 @@ historical tuning comparison: `python -m src.model.tune_epa`.
 
 **Deployment:** this pipeline needs enough memory to process the full dataset
 and train XGBoost. The existing free Render configuration disables background
-training (`NFL_DATA_REFRESH_HOURS=0`). Docker images also default to no training,
+training (`NFL_DATA_REFRESH_ENABLED=0`). Docker images also default to no training,
 and Render is detected even when the service does not use the Blueprint.
 Refresh locally, then deploy the updated
 `model/play_success_model.joblib` and `model/season_scorecard.json`, or enable
@@ -220,10 +227,10 @@ automatic refresh on a larger server. The API must remain running for periodic
 checks; an external scheduler can also run the complete update command.
 
 If Render reports an out-of-memory restart, first check the service's
-Environment page: set `NFL_DATA_REFRESH_HOURS=0` and choose **Save and deploy**.
+Environment page: set `NFL_DATA_REFRESH_ENABLED=0` and choose **Save and deploy**.
 The training dataframe alone uses about 1.4 GB, before feature-building and
 model-training overhead; run that workload locally. `/data/status` should
-report `refresh_interval_hours: 0` on the hosted API. The web container runs
+report `refresh_enabled: false` on the hosted API. The web container runs
 one serving worker, and the live-game cache expires entries and caps its size
 at 32 responses. If restarts continue with refresh disabled, inspect Render's
 memory graph and logs to diagnose serving-time usage separately.

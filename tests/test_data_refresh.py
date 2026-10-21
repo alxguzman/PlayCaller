@@ -123,6 +123,9 @@ class ApiStatusTests(unittest.TestCase):
                 ):
                     popen.return_value.__enter__.return_value = process
                     worker.run()
+                    command = popen.call_args.args[0]
+                    self.assertIn("--update-model", command)
+                    self.assertNotIn("--max-age-hours", command)
                 self.assertEqual(callback.call_count, 1 if returncode == 0 else 0)
 
     def test_api_stays_available_and_reports_loaded_model_freshness(self):
@@ -131,7 +134,7 @@ class ApiStatusTests(unittest.TestCase):
         artifact = {"trained_at": "2026-10-21", "data_through": "2026-10-19",
                     "test_season": 2026, "data_week": 7}
         with (
-            patch.dict("os.environ", {"NFL_DATA_REFRESH_HOURS": "0"}),
+            patch.dict("os.environ", {"NFL_DATA_REFRESH_ENABLED": "0"}),
             patch("src.api.main.load_artifact", return_value=artifact),
             patch("src.api.main.read_status", return_value={"error": "Source unavailable"}),
             TestClient(app) as client,
@@ -140,7 +143,8 @@ class ApiStatusTests(unittest.TestCase):
             status = client.get("/data/status").json()
             self.assertEqual(status["model_season"], 2026)
             self.assertEqual(status["error"], "Source unavailable")
-            self.assertEqual(status["refresh_interval_hours"], 0)
+            self.assertFalse(status["refresh_enabled"])
+            self.assertIsNone(status["next_scheduled_refresh_at"])
 
 
 if __name__ == "__main__":
