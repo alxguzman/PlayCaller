@@ -11,13 +11,9 @@ services:
     # and never deployed). `sync: false` = Render prompts for the value
     # when the blueprint is applied and stores it server-side only.
     envVars:
+      # Full training needs more memory than the free web instance offers.
+      # Refresh locally and deploy the model, or enable on a larger instance.
+      - key: NFL_DATA_REFRESH_HOURS
+        value: "0"
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: APP_USERNAME
-        sync: false
-      - key: APP_PASSWORD
-        sync: false
-      # Random per-service token-signing key, generated once by Render -
-      # keeps everyone signed in across deploys/restarts.
-      - key: APP_SECRET_KEY
-        generateValue: true

@@ -9,14 +9,30 @@ hand-rolled SVG, the bars/ring are CSS).
 
 ## Run it
 
+The dashboard opens directly without a login. Play Caller, Live Games,
+Season, and AI explanations are available to all visitors.
+
 ```powershell
-# 1. Start the API from the repo root (it serves the model):
+# 1. Start the API from the repo root (serves the model and refreshes NFL data):
 python -m uvicorn src.api.main:app --reload
 
 # 2. Start the dev server from this frontend/ folder:
 npm install
 npm run dev      # opens on http://localhost:5173
 ```
+
+The API checks nflverse for new play-by-play on startup and every six hours,
+then rebuilds the model and Season scorecard in the background. No data API
+key is required. For an immediate complete update, run this from the repo root:
+
+```powershell
+python -m src.data.refresh --update-model
+```
+
+Check `http://127.0.0.1:8000/data/status` for the loaded model's season, week,
+data coverage, and any refresh errors. The Live tab uses ESPN for in-game
+updates; nflverse supplies processed data after game days. Set
+`NFL_DATA_REFRESH_HOURS=0` in `.env` to disable background training.
 
 ## What's where
 

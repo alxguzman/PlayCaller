@@ -120,50 +120,15 @@ export function fetchSeasonScorecard() {
   return getJSON("/season-scorecard");
 }
 
-/* ---- sign-in ------------------------------------------------------
-   The token gates /explain (the endpoint that spends Claude credits).
-   It lives in localStorage so a refresh doesn't log you out; the server
-   expires it after 12 hours. */
-
-const TOKEN_KEY = "pc-token";
-const USER_KEY = "pc-user";
-
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function getUsername() {
-  return localStorage.getItem(USER_KEY);
-}
-
-export function clearSession() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
-}
-
-/** POST /login -> stores the bearer token. Throws on bad credentials. */
-export async function login(username, password) {
-  const res = await getJSON("/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-  localStorage.setItem(TOKEN_KEY, res.token);
-  localStorage.setItem(USER_KEY, res.username);
-  return res;
-}
-
 /**
  * Claude's coordinator-style explanation of the current recommendation.
- * Requires a login token; a 401 means the session expired - the caller
- * should clear it and show the sign-in page again.
+ * Public and button-triggered; no session token is needed.
  */
 export function fetchExplanation(situation) {
   return getJSON("/explain", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${getToken() ?? ""}`,
     },
     body: JSON.stringify(situation),
   });

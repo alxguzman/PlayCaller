@@ -11,8 +11,7 @@ Endpoints
 GET  /healthz   health check
 GET  /teams     valid team codes (for frontend dropdowns)
 POST /recommend full ranked call sheet for one game situation
-POST /login     username/password -> bearer token (see src/api/auth.py)
-POST /explain   Claude's coordinator-style explanation (login required)
+POST /explain   Claude's coordinator-style explanation (public)
 """
 
 import json
@@ -20,14 +19,15 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from src.ai.play_caller import CLAUDE_MODEL, PlayCallerError, explain_recommendation
-from src.api.auth import check_credentials, create_token, require_auth
+from src.api.data_refresh import DataRefreshWorker, refresh_hours
 from src.api.live import router as live_router
+from src.data.refresh import read_status
 from src.model.evaluate import load_artifact
 from src.model.recommend import RUN_PASS_BALANCE, SUCCESS_FLOOR_GAP, recommend_play
 
@@ -44,8 +44,17 @@ async def lifespan(app: FastAPI):
     except FileNotFoundError:
         # Don't crash the server - /recommend returns a clear 503 instead.
         state["artifact"] = None
-    yield
-    state["artifact"] = None
+    # The worker swaps in a fully loaded artifact only after an update succeeds.
+    def reload_model():
+        state["artifact"] = load_artifact()
+
+    worker = DataRefreshWorker(reload_model)
+    worker.start()
+    try:
+        yield
+    finally:
+        worker.stop()
+        state["artifact"] = None
 
 
 app = FastAPI(
@@ -141,16 +150,6 @@ class Recommendation(BaseModel):
     ranking: list[RankedPlay]
 
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-
-class LoginResponse(BaseModel):
-    token: str
-    username: str
-
-
 class Explanation(BaseModel):
     explanation: str
     best_call: str
@@ -199,6 +198,30 @@ def teams():
     return {"teams": sorted(artifact["off_form_lookup"].index)}
 
 
+@app.get("/data/status")
+def data_status():
+    """Source freshness and the model currently serving recommendations."""
+    status = read_status()
+    artifact = state["artifact"] or {}
+    return {
+        "source": "nflverse GitHub Releases API",
+        "live_source": "ESPN",
+        "refresh_interval_hours": refresh_hours(),
+        "refreshing": status.get("refreshing", False),
+        "checked_at": status.get("checked_at"),
+        "completed_at": status.get("completed_at"),
+        "error": status.get("error"),
+        "requested_season": status.get("requested_season"),
+        "latest_published_season": status.get("latest_published_season"),
+        "latest_game_date": status.get("latest_game_date"),
+        "latest_week": status.get("latest_week"),
+        "model_trained_at": artifact.get("trained_at"),
+        "model_data_through": artifact.get("data_through"),
+        "model_season": artifact.get("test_season"),
+        "model_week": artifact.get("data_week"),
+    }
+
+
 @app.get("/options")
 def options():
     """Every legal value for the request's categorical fields."""
@@ -218,6 +241,9 @@ def _rank_table(df, specs):
     (defense: EPA allowed) and ascending=False where higher is better
     (offense: EPA gained).
     """
+    # Week 1/new teams can have no prior history. Omit unavailable ranks
+    # rather than converting NaN to an integer or inventing season averages.
+    df = df.dropna(subset=[column for _, column, _ in specs])
     rank_series = {
         key: df[column].rank(ascending=asc, method="min") for key, column, asc in specs
     }
@@ -340,21 +366,12 @@ def recommend(situation: GameSituation):
     )
 
 
-@app.post("/login", response_model=LoginResponse)
-def login(body: LoginRequest):
-    """Trade the .env username/password for a 12-hour bearer token."""
-    if not check_credentials(body.username, body.password):
-        raise HTTPException(status_code=401, detail="Wrong username or password.")
-    return LoginResponse(token=create_token(body.username), username=body.username)
-
-
 @app.post("/explain", response_model=Explanation)
-def explain(situation: GameSituation, user: str = Depends(require_auth)):
+def explain(situation: GameSituation):
     """
     Claude's coordinator-style explanation of the recommended call.
 
-    Login-required: this is the one endpoint that spends Claude API tokens,
-    so it sits behind the sign-in (see src/api/auth.py).
+    Public like the dashboard; the frontend requests this only on a click.
     """
     result = _run_recommendation(situation)
 

@@ -9,8 +9,8 @@ Data sources (downloaded from nflverse GitHub releases):
   - data/raw/participation_YYYY.csv (or .csv.gz)
 
 The participation files add formation/personnel info (e.g. "11 personnel",
-shotgun formation, defenders in the box). The NFL stopped publishing this
-data after the 2023 season, so the loader treats it as OPTIONAL:
+shotgun formation, defenders in the box). FTN participation data from 2023
+onward is published after the postseason, so it remains OPTIONAL:
 plays without participation data simply get NaN in those columns.
 """
 
@@ -31,11 +31,11 @@ def _find_files(pattern):
     pandas can read gzip-compressed CSVs directly, so we don't need to
     decompress anything ourselves.
     """
-    files = sorted(
-        glob.glob(os.path.join(RAW_DIR, pattern + ".csv"))
-        + glob.glob(os.path.join(RAW_DIR, pattern + ".csv.gz"))
-    )
-    return files
+    # A downloaded .csv.gz supersedes an old manually copied .csv.
+    # Loading both silently doubles every play in that season.
+    files = {f: f for f in glob.glob(os.path.join(RAW_DIR, pattern + ".csv"))}
+    files.update({f[:-3]: f for f in glob.glob(os.path.join(RAW_DIR, pattern + ".csv.gz"))})
+    return sorted(files.values())
 
 
 def load_play_by_play():
@@ -52,7 +52,7 @@ def load_play_by_play():
     if not files:
         raise FileNotFoundError(
             f"No play_by_play files found in {RAW_DIR}. "
-            "Download them from nflverse and place them there."
+            "Run `python -m src.data.refresh --update-model` to fetch the latest API data."
         )
 
     frames = []

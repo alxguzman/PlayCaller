@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements-deploy.txt
 
 COPY src/ ./src/
 COPY model/play_success_model.joblib ./model/play_success_model.joblib
+COPY model/season_scorecard.json ./model/season_scorecard.json
 COPY --from=frontend /frontend/dist ./frontend/dist
 
 ENV PYTHONUNBUFFERED=1

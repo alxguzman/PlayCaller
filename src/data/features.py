@@ -211,8 +211,8 @@ def add_team_features(df, save=True):
 
     - Offensive stats join on (season, week, posteam)
     - Defensive stats join on (season, week, defteam)
-    - NaNs (mostly week-1 games with no history) are filled with the
-      season-wide mean for that column.
+    - NaNs (mostly week-1 games with no history) stay missing. Filling
+      them with a season-wide average would leak future outcomes.
 
     Parameters
     ----------
@@ -243,20 +243,17 @@ def add_team_features(df, save=True):
     df = df.merge(qb, on=["season", "week", "posteam"], how="left")
     assert len(df) == rows_before, "Join created duplicate rows!"
 
-    # Fill NaNs with the season mean for that column (week-1 games and
-    # first-start QBs have no rolling history yet, so we substitute "an
-    # average team" / "an average QB").
+    # XGBoost handles missing history natively. Never impute using games
+    # later in this season: those outcomes were unknown before this snap.
     feature_cols = [c for c in df.columns if c.startswith(("off_", "def_", "qbf_"))]
-    for col in feature_cols:
-        season_means = df.groupby("season")[col].transform("mean")
-        df[col] = df[col].fillna(season_means)
 
     print(f"Added {len(feature_cols)} team-form feature columns.")
 
     if save:
         os.makedirs(PROCESSED_DIR, exist_ok=True)
         out_path = os.path.join(PROCESSED_DIR, "pbp_features.csv")
-        df.to_csv(out_path, index=False)
+        df.to_csv(out_path + ".part", index=False)
+        os.replace(out_path + ".part", out_path)
         print(f"Saved -> {out_path}")
 
     print(f"Final shape: {df.shape[0]:,} rows x {df.shape[1]} columns")

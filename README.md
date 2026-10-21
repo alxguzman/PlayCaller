@@ -8,14 +8,14 @@ Built with: pandas · XGBoost · FastAPI · React · Claude API
 
 ## How it works
 
-1. **Data pipeline** — 3 seasons of nflverse play-by-play data, cleaned to
-   ~150k real run/pass decisions, enriched with rolling 4-week team-form
+1. **Data pipeline** — API-synced nflverse play-by-play from 2023 through
+   the latest published season, enriched with rolling 4-week team-form
    features (offensive/defensive EPA, success rates) with no data leakage.
 2. **Model** — three XGBoost models. Two take the play call as an input: a
    classifier for P(success) and a regressor for expected EPA. Scoring
    the same situation once per play concept (10 candidate calls) turns
    prediction into recommendation (see "How the recommender picks a
-   play" below). Trained on 2023–24, evaluated on a fully held-out 2025
+   play" below). Trained on prior seasons, evaluated on the newest published
    season (calibration, SHAP, and a coach-agreement outcome test).
 3. **API** — FastAPI backend (`src/api/`): POST `/recommend` returns the
    full ranked call sheet, with a `success_floor_gap` risk dial and
@@ -30,10 +30,9 @@ Built with: pandas · XGBoost · FastAPI · React · Claude API
    clicks don't burn API credits. Needs `ANTHROPIC_API_KEY` in `.env`.
 5. **Dashboard** *(Phase 5)* — React frontend (`frontend/`): set the
    situation, watch the formation diagram and ranked call sheet react
-   live. `npm run dev` in `frontend/` with the API running. The app sits
-   behind a simple sign-in (POST `/login`, credentials from
-   `APP_USERNAME`/`APP_PASSWORD` in `.env`) so strangers can't spend the
-   Claude tokens — `/explain` rejects requests without a valid session.
+   live. `npm run dev` in `frontend/` with the API running. The app is
+   open to everyone without sign-in. Recommendations, Live Games, Season,
+   and button-triggered AI explanations are public.
 6. **Live games** *(Phase 6)* — during a real NFL game, the Live tab
    polls ESPN's public JSON feed (`src/live/espn.py`, GET `/live/games`
    and `/live/games/{id}`), auto-fills the current situation, shows the
@@ -154,53 +153,69 @@ PlayCaller/
 pip install -r requirements.txt
 ```
 
-### 2. Data files
+### 2. Current NFL data (automatic API sync)
 
-One command downloads everything from nflverse (play-by-play, FTN
-charting, participation) and rebuilds the processed dataset:
+The backend checks the public **nflverse GitHub Releases API** at startup
+and every six hours while it is running. No API key is needed. It discovers
+published seasons from 2023 through the current NFL season, downloads only
+changed assets, rebuilds features, retrains the model, and updates the Season
+tab scorecard. January/February remain part of the previous NFL season.
 
-```powershell
-python -m src.data.refresh
-```
-
-Seasons are listed in `SEASONS` at the top of `src/data/refresh.py` —
-edit that list once a year. Files that nflverse hasn't published yet
-(e.g. the new season before week 1, or FTN/participation for recent
-seasons) are noted and skipped; the pipeline treats them as optional.
-
-**Weekly in-season routine** (Tuesdays, after Monday Night Football has
-landed in nflverse's nightly build):
+Run a complete update immediately from the repo root:
 
 ```powershell
-python -m src.data.refresh     # latest play-by-play
-python -m src.model.train      # retrain (also refreshes team-form lookups)
-python -m src.model.evaluate   # sanity-check the holdout metrics
-python -m src.model.season_log # rebuild the per-play model-vs-coach log
-# then commit model/play_success_model.joblib and push - Render redeploys
+python -m src.data.refresh --update-model
 ```
 
-`season_log` writes `data/processed/season_log_<year>.csv` — every play of
-the test season with the model's call (made from pre-snap info only) next
-to the coach's actual call and the real outcome, plus a week-by-week
-agreement table. Since the model is deterministic and never sees the
-coach's call, regenerating this after the fact gives the exact same
-recommendations it would have made live. Interpretation caveat: when the
-coach called something else, the model's play never ran — those rows are
-a comparison, not proof of who was right.
+Then start the API as usual:
 
-It also writes `model/season_scorecard.json` (committed with the weekly
-retrain), which GET `/season-scorecard` serves and the dashboard's
-**Season tab** renders — the week-by-week table in the app. The Live
-Games tab glows red whenever a game is in progress.
+```powershell
+python -m uvicorn src.api.main:app --reload
+```
 
-The retrain matters for live use: each team's rolling 4-week form is
-frozen into the artifact at train time, so a weekly retrain is what
-keeps recommendations current.
+The API keeps serving its loaded model during the background update and
+loads the replacement after a successful refresh. Download/model writes are
+atomic, concurrent refreshes are locked out, and failures leave the loaded
+model available. Raw files in `data/raw/` are a local API cache; you no
+longer need to download CSVs or edit season constants manually.
 
-**Season rollover** (once, at kickoff of a new season): in
-`src/model/train.py` bump `TEST_SEASON` and `VAL_SEASON` (e.g. 2026/2025),
-add the year to `SEASONS` in `refresh.py`, and retrain. The finished
-season moves into training and the new one becomes the holdout.
+- `GET /data/status`: last source check, downloaded season/week/game date,
+  refresh errors, and the **loaded model's** training time and data coverage.
+- `data/raw/refresh.log`: background download and training output.
+- `NFL_DATA_REFRESH_HOURS=6` in `.env`: check interval; `0` disables the worker.
+- `python -m src.data.refresh`: refresh data/features without retraining.
+- `python -m src.data.refresh --skip-rebuild`: refresh only the raw cache.
+
+**Update timing:** nflverse's processed play-by-play is updated nightly after
+game days, with additional game-day builds. FTN charting has its own schedule;
+participation from 2023 onward is published only after the postseason. Missing
+current-season optional charting is skipped. If a new season has not been
+published, the most recent available season remains in use. Source schedule:
+https://nflreadr.nflverse.com/articles/nflverse_data_schedule.html
+
+**During games:** the Live tab continues to use ESPN's public JSON API for
+scores, situations, and recent play-by-play. The nflverse refresh supplies
+EPA and charted features for modeling; it is not a real-time snap feed.
+
+Training automatically holds out the newest season in the data and uses late
+weeks of the previous season for validation. That split is saved with the
+model and used by evaluation and the season scorecard. Current-season form
+feeds the live recommender, while the season scorecard scores each historical
+play with its pre-snap rolling features. Run `python -m src.model.evaluate`
+after a refresh to inspect holdout performance.
+
+The model trains on both charted and missing-personnel/box versions of each
+play, and rejects an EPA replacement that fails the validation baseline.
+See [the 2026 model repair](docs/model-fix-2026.md) for the diagnosis, validation
+procedure, before/after results, and remaining limits. To rerun the small
+historical tuning comparison: `python -m src.model.tune_epa`.
+
+**Deployment:** this pipeline needs enough memory to process the full dataset
+and train XGBoost. The existing free Render configuration disables background
+training (`NFL_DATA_REFRESH_HOURS=0`). Refresh locally, then deploy the updated
+`model/play_success_model.joblib` and `model/season_scorecard.json`, or enable
+automatic refresh on a larger server. The API must remain running for periodic
+checks; an external scheduler can also run the complete update command.
 
 ### 3. Run the notebooks in order
 
@@ -211,7 +226,7 @@ and 04 (trains the model and demos the play caller).
 ### 4. Terminal shortcuts
 
 ```powershell
-python -m src.data.refresh     # download latest nflverse data + rebuild features
+python -m src.data.refresh --update-model  # API sync + features + model + scorecard
 python -m src.data.features    # rebuild data/processed/pbp_features.csv only
 python -m src.model.train      # train + save the model artifact
 python -m src.model.evaluate   # metrics + confusion matrix + SHAP charts
@@ -240,5 +255,5 @@ npm run dev
 - [x] Phase 1 — data pipeline + exploration notebooks
 - [x] Phase 2 — XGBoost model + recommender (`src/model/`)
 - [x] Phase 3 — FastAPI backend (`src/api/`)
-- [x] Phase 4 — Claude AI play caller (`src/ai/`) + sign-in gate
+- [x] Phase 4 — Claude AI play caller (`src/ai/`)
 - [x] Phase 5 — React dashboard (`frontend/`)

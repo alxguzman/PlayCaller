@@ -1,213 +1,69 @@
 {
- "season": 2025,
- "generated_at": "2026-08-29",
+ "season": 2026,
+ "generated_at": "2026-10-21",
  "weeks": [
   {
    "week": 1,
-   "plays": 1749,
-   "agreement": 0.2561,
-   "agreed_epa": 0.1735,
-   "other_epa": 0.0317,
-   "agreed_success": 0.5112,
-   "other_success": 0.4174
+   "plays": 1755,
+   "agreement": 0.298,
+   "agreed_epa": 0.1411,
+   "other_epa": 0.042,
+   "agreed_success": 0.5143,
+   "other_success": 0.4318
   },
   {
    "week": 2,
-   "plays": 1785,
-   "agreement": 0.2538,
-   "agreed_epa": 0.1244,
-   "other_epa": 0.0888,
-   "agreed_success": 0.479,
-   "other_success": 0.4467
+   "plays": 1771,
+   "agreement": 0.2891,
+   "agreed_epa": 0.2812,
+   "other_epa": -0.0371,
+   "agreed_success": 0.5156,
+   "other_success": 0.413
   },
   {
    "week": 3,
-   "plays": 1790,
-   "agreement": 0.2441,
-   "agreed_epa": 0.2311,
-   "other_epa": -0.0342,
-   "agreed_success": 0.5286,
-   "other_success": 0.4161
+   "plays": 1868,
+   "agreement": 0.2875,
+   "agreed_epa": 0.1464,
+   "other_epa": 0.0378,
+   "agreed_success": 0.5326,
+   "other_success": 0.4245
   },
   {
    "week": 4,
-   "plays": 1792,
-   "agreement": 0.2439,
-   "agreed_epa": 0.0121,
-   "other_epa": 0.0754,
-   "agreed_success": 0.4416,
-   "other_success": 0.4694
+   "plays": 1854,
+   "agreement": 0.301,
+   "agreed_epa": 0.0713,
+   "other_epa": 0.097,
+   "agreed_success": 0.5036,
+   "other_success": 0.4282
   },
   {
    "week": 5,
-   "plays": 1571,
-   "agreement": 0.2533,
-   "agreed_epa": 0.1901,
-   "other_epa": 0.1111,
-   "agreed_success": 0.4975,
-   "other_success": 0.4928
+   "plays": 1721,
+   "agreement": 0.3167,
+   "agreed_epa": 0.1771,
+   "other_epa": -0.0123,
+   "agreed_success": 0.5138,
+   "other_success": 0.3997
   },
   {
    "week": 6,
-   "plays": 1621,
-   "agreement": 0.2597,
-   "agreed_epa": 0.1776,
-   "other_epa": 0.0595,
-   "agreed_success": 0.4988,
-   "other_success": 0.4608
-  },
-  {
-   "week": 7,
-   "plays": 1698,
-   "agreement": 0.2356,
-   "agreed_epa": 0.0758,
-   "other_epa": 0.0446,
-   "agreed_success": 0.4275,
-   "other_success": 0.423
-  },
-  {
-   "week": 8,
-   "plays": 1419,
-   "agreement": 0.2389,
-   "agreed_epa": 0.0714,
-   "other_epa": 0.1382,
-   "agreed_success": 0.4631,
-   "other_success": 0.4713
-  },
-  {
-   "week": 9,
-   "plays": 1565,
-   "agreement": 0.2665,
-   "agreed_epa": 0.2152,
-   "other_epa": 0.125,
-   "agreed_success": 0.4964,
-   "other_success": 0.4826
-  },
-  {
-   "week": 10,
-   "plays": 1575,
-   "agreement": 0.2679,
-   "agreed_epa": 0.1184,
-   "other_epa": 0.0471,
-   "agreed_success": 0.4668,
-   "other_success": 0.4449
-  },
-  {
-   "week": 11,
-   "plays": 1724,
-   "agreement": 0.2517,
-   "agreed_epa": -0.0651,
-   "other_epa": 0.06,
-   "agreed_success": 0.4378,
-   "other_success": 0.4581
-  },
-  {
-   "week": 12,
-   "plays": 1602,
-   "agreement": 0.2372,
-   "agreed_epa": 0.0516,
-   "other_epa": -0.0378,
-   "agreed_success": 0.4737,
-   "other_success": 0.4108
-  },
-  {
-   "week": 13,
-   "plays": 1816,
-   "agreement": 0.2748,
-   "agreed_epa": 0.0969,
-   "other_epa": 0.0342,
-   "agreed_success": 0.4629,
-   "other_success": 0.4305
-  },
-  {
-   "week": 14,
-   "plays": 1584,
-   "agreement": 0.2304,
-   "agreed_epa": 0.0555,
-   "other_epa": 0.0265,
-   "agreed_success": 0.4301,
-   "other_success": 0.4479
-  },
-  {
-   "week": 15,
-   "plays": 1757,
-   "agreement": 0.2726,
-   "agreed_epa": 0.172,
-   "other_epa": 0.1122,
-   "agreed_success": 0.4906,
-   "other_success": 0.4656
-  },
-  {
-   "week": 16,
-   "plays": 1821,
-   "agreement": 0.2625,
-   "agreed_epa": 0.1624,
-   "other_epa": 0.1137,
-   "agreed_success": 0.4916,
-   "other_success": 0.4505
-  },
-  {
-   "week": 17,
-   "plays": 1753,
-   "agreement": 0.2693,
-   "agreed_epa": 0.1325,
-   "other_epa": 0.0483,
-   "agreed_success": 0.4809,
-   "other_success": 0.4184
-  },
-  {
-   "week": 18,
-   "plays": 1736,
-   "agreement": 0.2396,
-   "agreed_epa": -0.0426,
-   "other_epa": 0.0039,
-   "agreed_success": 0.4255,
-   "other_success": 0.4386
-  },
-  {
-   "week": 19,
-   "plays": 710,
-   "agreement": 0.2451,
-   "agreed_epa": 0.118,
-   "other_epa": 0.0541,
-   "agreed_success": 0.5,
-   "other_success": 0.4347
-  },
-  {
-   "week": 20,
-   "plays": 510,
-   "agreement": 0.2275,
-   "agreed_epa": 0.1641,
-   "other_epa": -0.1071,
-   "agreed_success": 0.4828,
-   "other_success": 0.3959
-  },
-  {
-   "week": 21,
-   "plays": 219,
-   "agreement": 0.2055,
-   "agreed_epa": 0.3522,
-   "other_epa": 0.0213,
-   "agreed_success": 0.5111,
-   "other_success": 0.3908
-  },
-  {
-   "week": 22,
-   "plays": 125,
-   "agreement": 0.408,
-   "agreed_epa": -0.1983,
-   "other_epa": -0.0665,
-   "agreed_success": 0.4314,
-   "other_success": 0.3243
+   "plays": 1661,
+   "agreement": 0.3245,
+   "agreed_epa": 0.068,
+   "other_epa": -0.0152,
+   "agreed_success": 0.4917,
+   "other_success": 0.4082
   }
  ],
  "totals": {
   "week": "season",
-  "plays": 31922,
-  "agreement": 0.2531,
-  "agreed_epa": 0.1108,
-  "other_epa": 0.0537,
-  "agreed_success": 0.474,
-  "other_success": 0.4444
+  "plays": 10630,
+  "agreement": 0.3024,
+  "agreed_epa": 0.146,
+  "other_epa": 0.0202,
+  "agreed_success": 0.5118,
+  "other_success": 0.418
  }
 }

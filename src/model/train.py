@@ -12,7 +12,7 @@ recommendation time we score the same situation once per candidate call
 and rank them: "in this spot, against this defense, a play-action deep
 shot succeeds 48% of the time, an inside run 41%..."
 
-Train/test split is BY SEASON (see the ROLLOVER constants below). Random
+Train/test split is BY SEASON (the newest season is held out). Random
 splitting time-series data leaks information: plays from the same game
 would land in both train and test.
 
@@ -20,11 +20,13 @@ Run with:  python -m src.model.train
 """
 
 import os
+from datetime import datetime, timezone
 
 import joblib
 import numpy as np
 import pandas as pd
 import xgboost as xgb
+from sklearn.metrics import mean_squared_error
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_PATH = os.path.join(PROJECT_ROOT, "data", "processed", "pbp_features.csv")
@@ -33,11 +35,10 @@ MODEL_PATH = os.path.join(MODEL_DIR, "play_success_model.joblib")
 
 TARGET = "success"
 
-# --- SEASON ROLLOVER: change these three lines once per year -------------
-# At 2026 kickoff: TEST_SEASON = 2026, VAL_SEASON = 2025 (then retrain -
-# 2025 moves fully into training). See docs/experiments.md.
-TEST_SEASON = 2025    # held out until evaluation
-VAL_SEASON = 2024     # late weeks of this season used for early stopping
+# Legacy artifact defaults. New training derives the split from the data
+# and persists it in the artifact, so evaluation survives season rollover.
+TEST_SEASON = 2025
+VAL_SEASON = 2024
 VAL_WEEK_FROM = 15    # first week of VAL_SEASON that goes to validation
 
 # Situation features: everything here is knowable BEFORE the snap.
@@ -53,6 +54,32 @@ NUMERIC_FEATURES = [
 ]
 
 RUN_CONCEPTS = {"inside_run", "off_tackle_run", "outside_run", "qb_sneak"}
+OPTIONAL_CONTEXT_COLUMNS = {"defenders_in_box", "box_x_run", "box_x_pass"}
+# Selected by tune_epa on 2024/2025 temporal validation, not 2026 outcomes.
+EPA_MODEL_PARAMS = {"max_depth": 3, "min_child_weight": 100, "reg_lambda": 20}
+
+
+def mask_optional_context(X):
+    """Match in-season/live requests where participation is unavailable."""
+    masked = X.copy()
+    for column in OPTIONAL_CONTEXT_COLUMNS.intersection(masked.columns):
+        masked[column] = np.nan
+    masked.loc[:, masked.columns.str.startswith("personnel_")] = False
+    return masked
+
+
+def augment_optional_context(X, y):
+    """Give each historical play a charted and an uncharted representation.
+
+    Half weights preserve each original play's total training weight.
+    This teaches missing-value paths without discarding known box/personnel
+    inputs, and never uses held-out outcomes to construct training data.
+    """
+    return (
+        pd.concat([X, mask_optional_context(X)], ignore_index=True),
+        pd.concat([y, y], ignore_index=True),
+        np.full(len(X) * 2, 0.5),
+    )
 
 
 def add_box_interactions(df):
@@ -127,16 +154,16 @@ def prepare_data(df):
     return X, y, meta
 
 
-def split_by_season(X, y, meta):
+def split_by_season(X, y, meta, test_season=None, val_season=None):
     """
-    Temporal split (seasons set by the ROLLOVER constants up top):
-      train      = everything before VAL_SEASON wk VAL_WEEK_FROM
-      validation = VAL_SEASON weeks VAL_WEEK_FROM+   (for early stopping)
-      test       = TEST_SEASON                       (never touched until evaluation)
+    Hold out the latest season and validate on the previous season's late
+    weeks. Explicit seasons reproduce a saved artifact's evaluation split.
     """
-    is_test = meta["season"] == TEST_SEASON
-    is_val = (meta["season"] == VAL_SEASON) & (meta["week"] >= VAL_WEEK_FROM)
-    is_train = ~is_test & ~is_val
+    test_season = int(meta["season"].max()) if test_season is None else test_season
+    val_season = test_season - 1 if val_season is None else val_season
+    is_test = meta["season"] == test_season
+    is_val = (meta["season"] == val_season) & (meta["week"] >= VAL_WEEK_FROM)
+    is_train = (meta["season"] < test_season) & ~is_val
 
     return (
         X[is_train], y[is_train],
@@ -236,12 +263,19 @@ def train():
     print("Loading processed data ...")
     df = load_processed()
     X, y, meta = prepare_data(df)
+    test_season = int(meta["season"].max())
+    val_season = test_season - 1
     X_train, y_train, X_val, y_val, X_test, y_test = split_by_season(X, y, meta)
+    if X_train.empty or X_val.empty or X_test.empty:
+        raise ValueError("Training requires earlier seasons, a validation season, and a holdout season.")
 
-    print(f"Train: {len(X_train):,} plays (before {VAL_SEASON} wk{VAL_WEEK_FROM})")
-    print(f"Valid: {len(X_val):,} plays ({VAL_SEASON} wk{VAL_WEEK_FROM}+, for early stopping)")
-    print(f"Test : {len(X_test):,} plays ({TEST_SEASON}, held out)")
+    print(f"Train: {len(X_train):,} plays (before {val_season} wk{VAL_WEEK_FROM})")
+    print(f"Valid: {len(X_val):,} plays ({val_season} wk{VAL_WEEK_FROM}+, for early stopping)")
+    print(f"Test : {len(X_test):,} plays ({test_season}, held out)")
     print(f"Features: {X.shape[1]} columns after one-hot encoding")
+
+    success_X, success_y, success_weights = augment_optional_context(X_train, y_train)
+    success_val_X, success_val_y, _ = augment_optional_context(X_val, y_val)
 
     model = xgb.XGBClassifier(
         n_estimators=600,          # up to 600 trees...
@@ -252,29 +286,47 @@ def train():
         colsample_bytree=0.8,      # a standard guard against overfitting
         eval_metric="logloss",
         random_state=42,
+        n_jobs=4,
     )
     print("\nTraining success classifier (takes ~a minute) ...")
-    model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=50)
+    model.fit(success_X, success_y, sample_weight=success_weights,
+              eval_set=[(success_val_X, success_val_y)], verbose=50)
     print(f"Best iteration: {model.best_iteration} trees")
 
     # --- Model 2: EPA regressor (same features, same split) ---------------
     epa = meta["epa"]
     epa_train = epa.loc[X_train.index]
     epa_val = epa.loc[X_val.index]
+    epa_X, epa_y, epa_weights = augment_optional_context(X_train, epa_train)
+    epa_val_X, epa_val_y, _ = augment_optional_context(X_val, epa_val)
 
     epa_model = xgb.XGBRegressor(
         n_estimators=600,
         early_stopping_rounds=30,
         learning_rate=0.05,
-        max_depth=6,
+        **EPA_MODEL_PARAMS,
         subsample=0.8,
         colsample_bytree=0.8,
         eval_metric="rmse",
         random_state=42,
+        n_jobs=4,
     )
     print("\nTraining EPA regressor (takes ~a minute) ...")
-    epa_model.fit(X_train, epa_train, eval_set=[(X_val, epa_val)], verbose=50)
+    epa_model.fit(epa_X, epa_y, sample_weight=epa_weights,
+                  eval_set=[(epa_val_X, epa_val_y)], verbose=50)
     print(f"Best iteration: {epa_model.best_iteration} trees")
+
+    # Compare with a deployable baseline fitted on training outcomes only.
+    # Validate both known and missing context before replacing the artifact.
+    baseline_epa = float(epa_train.mean())
+    validation = {
+        "epa_charted_rmse": float(mean_squared_error(epa_val, epa_model.predict(X_val)) ** 0.5),
+        "epa_missing_context_rmse": float(mean_squared_error(epa_val, epa_model.predict(mask_optional_context(X_val))) ** 0.5),
+        "epa_baseline_rmse": float(mean_squared_error(epa_val, np.full(len(epa_val), baseline_epa)) ** 0.5),
+    }
+    print(f"Validation: {validation}")
+    if max(validation["epa_charted_rmse"], validation["epa_missing_context_rmse"]) >= validation["epa_baseline_rmse"]:
+        raise ValueError("EPA model failed validation against the training-mean baseline; existing artifact retained.")
 
     # --- Model 3: coach-call model (same split, situation-only features) --
     concept_classes = sorted(df["play_concept"].dropna().unique())
@@ -288,6 +340,14 @@ def train():
     off_lookup, def_lookup = build_team_form_lookup(df)
 
     artifact = {
+        "test_season": test_season,
+        "val_season": val_season,
+        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "data_through": str(df["game_date"].max()),
+        "data_week": int(df.loc[df["season"] == test_season, "week"].max()),
+        "epa_baseline": baseline_epa,
+        "validation": validation,
+        "training_strategy": "half-weight charted/missing context; no future-season imputation",
         "model": model,
         "epa_model": epa_model,
         "call_model": call_model,               # P(coach's call | situation)
@@ -300,7 +360,8 @@ def train():
         "def_form_lookup": def_lookup,
     }
     os.makedirs(MODEL_DIR, exist_ok=True)
-    joblib.dump(artifact, MODEL_PATH)
+    joblib.dump(artifact, MODEL_PATH + ".part")
+    os.replace(MODEL_PATH + ".part", MODEL_PATH)
     print(f"\nSaved model artifact -> {MODEL_PATH}")
     return artifact
 

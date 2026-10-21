@@ -9,7 +9,7 @@ import { fetchExplanation } from "../api.js";
  * The answer is tied to the recommendation it explains - when the
  * situation changes and a new rec arrives, the stale text is cleared.
  */
-export default function CoachExplanation({ rec, situation, onAuthError }) {
+export default function CoachExplanation({ rec, situation }) {
   const [text, setText] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -25,10 +25,7 @@ export default function CoachExplanation({ rec, situation, onAuthError }) {
     setError(null);
     fetchExplanation(situation)
       .then((r) => setText(r.explanation))
-      .catch((e) => {
-        if (e.status === 401) onAuthError();
-        else setError(e.message);
-      })
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }
 

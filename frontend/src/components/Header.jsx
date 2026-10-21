@@ -1,4 +1,4 @@
-export default function Header({ username, onSignOut, view, onViewChange, liveNow }) {
+export default function Header({ view, onViewChange, liveNow }) {
   return (
     <header className="header">
       <div className="brand">
@@ -28,12 +28,6 @@ export default function Header({ username, onSignOut, view, onViewChange, liveNo
           ▦ Season
         </button>
       </nav>
-      <div className="header-user">
-        <span className="muted">{username}</span>
-        <button className="signout-btn" onClick={onSignOut}>
-          Sign out
-        </button>
-      </div>
     </header>
   );
 }

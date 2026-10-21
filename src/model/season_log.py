@@ -41,10 +41,6 @@ from src.model.train import (
     prepare_data,
 )
 
-LOG_PATH = os.path.join(
-    PROJECT_ROOT, "data", "processed", f"season_log_{TEST_SEASON}.csv"
-)
-
 # The compact week-by-week summary lives in model/ (NOT data/, which is
 # gitignored) so committing the weekly retrain also ships the scorecard
 # to the deployed app - GET /season-scorecard serves this file and the
@@ -63,16 +59,17 @@ PLAY_COLUMNS = [
 def build_log(artifact=None):
     """Return the full per-play log as a DataFrame (or None pre-season)."""
     artifact = artifact or load_artifact()
+    test_season = artifact.get("test_season", TEST_SEASON)
 
     df = load_processed()
     X, y, meta = prepare_data(df)
-    is_test = (meta["season"] == TEST_SEASON).to_numpy()
+    is_test = (meta["season"] == test_season).to_numpy()
     if is_test.sum() == 0:
-        print(f"No {TEST_SEASON} plays in the dataset yet - nothing to log.")
+        print(f"No {test_season} plays in the dataset yet - nothing to log.")
         return None
 
     X_test = X[is_test]
-    print(f"Scoring {len(X_test):,} plays from the {TEST_SEASON} season ...")
+    print(f"Scoring {len(X_test):,} plays from the {test_season} season ...")
     recommended = model_recommendations(X_test, artifact)
 
     # prepare_data preserved the original row index, so we can pull the
@@ -104,7 +101,7 @@ def weekly_summary(log):
     return weekly
 
 
-def write_summary_json(weekly):
+def write_summary_json(weekly, test_season=TEST_SEASON):
     """
     Save the weekly table as model/season_scorecard.json for the API.
 
@@ -120,30 +117,34 @@ def write_summary_json(weekly):
 
     weeks = [row_dict(int(w), weekly.loc[w]) for w in weekly.index if w != "season"]
     payload = {
-        "season": TEST_SEASON,
+        "season": test_season,
         "generated_at": time.strftime("%Y-%m-%d"),
         "weeks": weeks,
         "totals": row_dict("season", weekly.loc["season"]),
     }
-    with open(SUMMARY_PATH, "w") as f:
+    with open(SUMMARY_PATH + ".part", "w") as f:
         json.dump(payload, f, indent=1)
+    os.replace(SUMMARY_PATH + ".part", SUMMARY_PATH)
     return payload
 
 
-def main():
-    log = build_log()
+def main(artifact=None):
+    artifact = artifact or load_artifact()
+    test_season = artifact.get("test_season", TEST_SEASON)
+    log_path = os.path.join(PROJECT_ROOT, "data", "processed", f"season_log_{test_season}.csv")
+    log = build_log(artifact)
     if log is None:
         return
 
-    log.to_csv(LOG_PATH, index=False)
-    print(f"Saved {len(log):,} plays -> {LOG_PATH}\n")
+    log.to_csv(log_path, index=False)
+    print(f"Saved {len(log):,} plays -> {log_path}\n")
 
     weekly = weekly_summary(log)
-    write_summary_json(weekly)
+    write_summary_json(weekly, test_season)
     print(f"Saved week-by-week summary -> {SUMMARY_PATH}\n")
 
     print("=" * 72)
-    print(f"MODEL vs COACH - {TEST_SEASON} season, week by week")
+    print(f"MODEL vs COACH - {test_season} season, week by week")
     print("=" * 72)
     print(weekly.round(3).to_string())
     print(

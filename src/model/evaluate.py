@@ -1,8 +1,7 @@
 """
 evaluate.py
 -----------
-Evaluates the trained model on the held-out test season (TEST_SEASON in
-train.py):
+Evaluates the trained model on the held-out season saved in its artifact:
   - accuracy, ROC-AUC, log-loss
   - confusion matrix
   - SHAP values: which features actually drive the predictions?
@@ -53,11 +52,16 @@ def load_artifact():
     return joblib.load(MODEL_PATH)
 
 
-def get_test_set():
+def get_test_set(artifact=None):
     """Rebuild the held-out test set exactly as train.py defined it."""
     df = load_processed()
     X, y, meta = prepare_data(df)
-    *_, X_test, y_test = split_by_season(X, y, meta)
+    artifact = artifact or load_artifact()
+    *_, X_test, y_test = split_by_season(
+        X, y, meta, artifact.get("test_season", TEST_SEASON),
+        artifact.get("val_season", TEST_SEASON - 1),
+    )
+    X_test = X_test.reindex(columns=artifact["feature_columns"], fill_value=0)
     return X_test, y_test
 
 
@@ -71,18 +75,19 @@ def evaluate(artifact=None, show=False):
     ranking of play calls, not in predicting single plays.
     """
     artifact = artifact or load_artifact()
+    test_season = artifact.get("test_season", TEST_SEASON)
     model = artifact["model"]
-    X_test, y_test = get_test_set()
+    X_test, y_test = get_test_set(artifact)
 
     if len(y_test) == 0:
-        print(f"No {TEST_SEASON} plays in the dataset yet - nothing to evaluate.")
+        print(f"No {test_season} plays in the dataset yet - nothing to evaluate.")
         return None
 
     proba = model.predict_proba(X_test)[:, 1]   # P(success) per play
     pred = (proba >= 0.5).astype(int)
 
     print("=" * 50)
-    print(f"EVALUATION - held-out {TEST_SEASON} season")
+    print(f"EVALUATION - held-out {test_season} season")
     print("=" * 50)
     print(f"Plays      : {len(y_test):,}")
     print(f"Accuracy   : {accuracy_score(y_test, pred):.3f}")
@@ -95,7 +100,7 @@ def evaluate(artifact=None, show=False):
     ConfusionMatrixDisplay(cm, display_labels=["fail", "success"]).plot(
         ax=ax, colorbar=False
     )
-    ax.set_title(f"Confusion matrix - {TEST_SEASON} test season")
+    ax.set_title(f"Confusion matrix - {test_season} test season")
     fig.tight_layout()
 
     if show:
@@ -116,6 +121,7 @@ def evaluate_epa_model(artifact=None):
     from sklearn.metrics import mean_squared_error, r2_score
 
     artifact = artifact or load_artifact()
+    test_season = artifact.get("test_season", TEST_SEASON)
     epa_model = artifact.get("epa_model")
     if epa_model is None:
         print("No EPA regressor in this artifact - re-run training.")
@@ -123,25 +129,29 @@ def evaluate_epa_model(artifact=None):
 
     df = load_processed()
     X, y, meta = prepare_data(df)
-    is_test = meta["season"] == TEST_SEASON
-    X_test = X[is_test]
+    is_test = meta["season"] == test_season
+    X_test = X[is_test].reindex(columns=artifact["feature_columns"], fill_value=0)
     epa_test = meta.loc[is_test, "epa"]
 
     if len(epa_test) == 0:
-        print(f"No {TEST_SEASON} plays in the dataset yet - nothing to evaluate.")
+        print(f"No {test_season} plays in the dataset yet - nothing to evaluate.")
         return
 
     pred = epa_model.predict(X_test)
     rmse = mean_squared_error(epa_test, pred) ** 0.5
-    baseline_rmse = mean_squared_error(
-        epa_test, np.full(len(epa_test), epa_test.mean())
-    ) ** 0.5
+    baseline = artifact.get("epa_baseline")
+    if baseline is None:
+        # Compatibility for old artifacts: reconstruct their training split.
+        X_train, *_ = split_by_season(X, y, meta, test_season,
+                                     artifact.get("val_season", test_season - 1))
+        baseline = float(meta.loc[X_train.index, "epa"].mean())
+    baseline_rmse = mean_squared_error(epa_test, np.full(len(epa_test), baseline)) ** 0.5
 
     print("=" * 50)
-    print(f"EPA REGRESSOR - held-out {TEST_SEASON} season")
+    print(f"EPA REGRESSOR - held-out {test_season} season")
     print("=" * 50)
     print(f"RMSE          : {rmse:.4f}")
-    print(f"Baseline RMSE : {baseline_rmse:.4f} (always predict the mean)")
+    print(f"Baseline RMSE : {baseline_rmse:.4f} (training-set mean)")
     print(f"R-squared     : {r2_score(epa_test, pred):.4f}")
 
 
@@ -158,11 +168,12 @@ def calibration(artifact=None, n_bins=10, show=False):
     from sklearn.calibration import calibration_curve
 
     artifact = artifact or load_artifact()
+    test_season = artifact.get("test_season", TEST_SEASON)
     model = artifact["model"]
-    X_test, y_test = get_test_set()
+    X_test, y_test = get_test_set(artifact)
 
     if len(y_test) == 0:
-        print(f"No {TEST_SEASON} plays in the dataset yet - nothing to evaluate.")
+        print(f"No {test_season} plays in the dataset yet - nothing to evaluate.")
         return None
 
     proba = model.predict_proba(X_test)[:, 1]
@@ -174,7 +185,7 @@ def calibration(artifact=None, n_bins=10, show=False):
     ax.plot(mean_pred, frac_pos, marker="o", color="steelblue", label="model")
     ax.set_xlabel("Predicted success probability")
     ax.set_ylabel("Actual success rate")
-    ax.set_title(f"Calibration - {TEST_SEASON} test season")
+    ax.set_title(f"Calibration - {test_season} test season")
     ax.legend()
     fig.tight_layout()
 
@@ -222,6 +233,14 @@ def model_recommendations(X_situations, artifact, call_credibility=None):
         X_c = X_situations.copy()
         X_c[concept_cols] = False
         X_c[f"play_concept_{concept}"] = True
+        # Recompute call-dependent inputs for the hypothetical call. Keeping
+        # the coach's original box interaction gives a contradictory row.
+        if "defenders_in_box" in X_c:
+            is_run = concept in RUN_CONCEPTS
+            if "box_x_run" in X_c:
+                X_c["box_x_run"] = X_c["defenders_in_box"] * is_run
+            if "box_x_pass" in X_c:
+                X_c["box_x_pass"] = X_c["defenders_in_box"] * (not is_run)
         probs[:, j] = model.predict_proba(X_c)[:, 1]
         if epa_model is not None:
             epas[:, j] = epa_model.predict(X_c)
@@ -274,14 +293,15 @@ def recommendation_agreement(artifact=None, show=False):
     so disagreement is never counted as the model being wrong.
     """
     artifact = artifact or load_artifact()
+    test_season = artifact.get("test_season", TEST_SEASON)
 
     df = load_processed()
     X, y, meta = prepare_data(df)
-    is_test = (meta["season"] == TEST_SEASON).to_numpy()
+    is_test = (meta["season"] == test_season).to_numpy()
     if is_test.sum() == 0:
-        print(f"No {TEST_SEASON} plays in the dataset yet - nothing to evaluate.")
+        print(f"No {test_season} plays in the dataset yet - nothing to evaluate.")
         return None, None
-    X_test = X[is_test]
+    X_test = X[is_test].reindex(columns=artifact["feature_columns"], fill_value=0)
     actual_concept = meta.loc[is_test, "play_concept"].to_numpy()
     actual_epa = meta.loc[is_test, "epa"].to_numpy()
     actual_success = y[is_test].to_numpy()
@@ -300,7 +320,7 @@ def recommendation_agreement(artifact=None, show=False):
     }, index=["coach agreed with model", "coach called something else"])
 
     print("=" * 60)
-    print(f"RECOMMENDER EVALUATION - {TEST_SEASON} season")
+    print(f"RECOMMENDER EVALUATION - {test_season} season")
     print("=" * 60)
     print(f"Agreement rate: {agreed.mean():.1%} of plays\n")
     print(summary.round(3).to_string())
@@ -334,7 +354,7 @@ def shap_summary(artifact=None, sample_size=2000, show=False):
 
     artifact = artifact or load_artifact()
     model = artifact["model"]
-    X_test, _ = get_test_set()
+    X_test, _ = get_test_set(artifact)
 
     sample = X_test.sample(min(sample_size, len(X_test)), random_state=42)
     explainer = shap.TreeExplainer(model)

@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  clearSession,
   fetchDefenseRanks,
   fetchLiveGames,
   fetchOffenseRanks,
   fetchOptions,
   fetchRecommendation,
-  getToken,
-  getUsername,
 } from "./api.js";
 import Header from "./components/Header.jsx";
-import Login from "./components/Login.jsx";
 import SituationPanel from "./components/SituationPanel.jsx";
 import RecommendationCard from "./components/RecommendationCard.jsx";
 import CoachExplanation from "./components/CoachExplanation.jsx";
@@ -118,8 +114,6 @@ function loadHistory() {
 }
 
 export default function App() {
-  // null = not signed in -> show the login page instead of the dashboard.
-  const [user, setUser] = useState(() => (getToken() ? getUsername() : null));
   const [view, setView] = useState("sim"); // "sim" | "live" | "season"
   const [liveNow, setLiveNow] = useState(false); // any game in progress?
   const [situation, setSituation] = useState(DEFAULT_SITUATION);
@@ -153,16 +147,14 @@ export default function App() {
       .catch(() => setDefense(null));
   }, []);
 
-  // Don't hit the API until someone is signed in - the login page
-  // shouldn't fire requests in the background.
+  // Load the public dashboard as soon as the page opens.
   useEffect(() => {
-    if (user) loadOptions();
-  }, [user, loadOptions]);
+    loadOptions();
+  }, [loadOptions]);
 
   // Light scoreboard poll (server caches ESPN calls) so the Live Games
   // tab can glow when a game is actually in progress.
   useEffect(() => {
-    if (!user) return;
     const check = () =>
       fetchLiveGames()
         .then((d) => setLiveNow(d.games.some((g) => g.state === "in")))
@@ -170,12 +162,12 @@ export default function App() {
     check();
     const t = setInterval(check, 60_000);
     return () => clearInterval(t);
-  }, [user]);
+  }, []);
 
   // Re-ask the model whenever the situation changes (debounced so
   // dragging a slider doesn't fire a request per pixel).
   useEffect(() => {
-    if (!options || !user) return;
+    if (!options) return;
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setLoading(true);
@@ -188,7 +180,7 @@ export default function App() {
         .finally(() => setLoading(false));
     }, 350);
     return () => clearTimeout(debounceRef.current);
-  }, [situation, options, user]);
+  }, [situation, options]);
 
   const saveToHistory = useCallback(() => {
     if (!rec) return;
@@ -220,15 +212,6 @@ export default function App() {
     setHistory([]);
   }, []);
 
-  const signOut = useCallback(() => {
-    clearSession();
-    setUser(null);
-  }, []);
-
-  if (!user) {
-    return <Login onSignIn={setUser} />;
-  }
-
   // What the field actually shows: pinned values win, otherwise the
   // recommender's defaults (its natural-home formation, a typical box).
   const fieldFormation =
@@ -242,8 +225,6 @@ export default function App() {
     return (
       <div className="app">
         <Header
-          username={user}
-          onSignOut={signOut}
           view={view}
           onViewChange={setView}
           liveNow={liveNow}
@@ -256,8 +237,6 @@ export default function App() {
   return (
     <div className="app">
       <Header
-        username={user}
-        onSignOut={signOut}
         view={view}
         onViewChange={setView}
         liveNow={liveNow}
@@ -288,7 +267,6 @@ export default function App() {
           <CoachExplanation
             rec={rec}
             situation={toRequest(situation)}
-            onAuthError={signOut}
           />
           <Field
             situation={situation}
