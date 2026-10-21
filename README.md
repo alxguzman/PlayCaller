@@ -212,10 +212,21 @@ historical tuning comparison: `python -m src.model.tune_epa`.
 
 **Deployment:** this pipeline needs enough memory to process the full dataset
 and train XGBoost. The existing free Render configuration disables background
-training (`NFL_DATA_REFRESH_HOURS=0`). Refresh locally, then deploy the updated
+training (`NFL_DATA_REFRESH_HOURS=0`). Docker images also default to no training,
+and Render is detected even when the service does not use the Blueprint.
+Refresh locally, then deploy the updated
 `model/play_success_model.joblib` and `model/season_scorecard.json`, or enable
 automatic refresh on a larger server. The API must remain running for periodic
 checks; an external scheduler can also run the complete update command.
+
+If Render reports an out-of-memory restart, first check the service's
+Environment page: set `NFL_DATA_REFRESH_HOURS=0` and choose **Save and deploy**.
+The training dataframe alone uses about 1.4 GB, before feature-building and
+model-training overhead; run that workload locally. `/data/status` should
+report `refresh_interval_hours: 0` on the hosted API. The web container runs
+one serving worker, and the live-game cache expires entries and caps its size
+at 32 responses. If restarts continue with refresh disabled, inspect Render's
+memory graph and logs to diagnose serving-time usage separately.
 
 ### 3. Run the notebooks in order
 

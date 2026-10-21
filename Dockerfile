@@ -24,6 +24,9 @@ COPY model/season_scorecard.json ./model/season_scorecard.json
 COPY --from=frontend /frontend/dist ./frontend/dist
 
 ENV PYTHONUNBUFFERED=1
+# Serving containers must not download/process the multi-GB training data.
+# Set this here as well as render.yaml for services created without a Blueprint.
+ENV NFL_DATA_REFRESH_HOURS=0
 # Render (and most hosts) inject $PORT; default to 8000 for local `docker run`.
 EXPOSE 8000
-CMD ["sh", "-c", "uvicorn src.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "exec uvicorn src.api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

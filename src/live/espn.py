@@ -22,6 +22,7 @@ recommendation_agreement in src/model/evaluate.py).
 """
 
 import json
+from collections import OrderedDict
 import threading
 import time
 import urllib.request
@@ -44,7 +45,8 @@ CONCEPT_FAMILY = {
 # Fetching (with a tiny in-process cache so many viewers = one ESPN call)
 # ---------------------------------------------------------------------------
 
-_cache = {}  # url -> (fetched_at, parsed_json)
+_CACHE_MAX = 32
+_cache = OrderedDict()  # url -> (expires_at, parsed_json)
 _cache_lock = threading.Lock()
 
 # ESPN filters on request headers: a custom User-Agent ("playcaller/1.0")
@@ -72,10 +74,13 @@ def fetch_json(url, ttl=8):
     The cache means that no matter how many browser tabs are polling the
     Live tab, this server sends ESPN at most one request per ttl per url.
     """
-    now = time.time()
+    now = time.monotonic()
     with _cache_lock:
+        for expired in [key for key, (expires_at, _) in _cache.items() if expires_at <= now]:
+            del _cache[expired]
         hit = _cache.get(url)
-        if hit and now - hit[0] < ttl:
+        if hit:
+            _cache.move_to_end(url)
             return hit[1]
 
     req = urllib.request.Request(url, headers=_BROWSER_HEADERS)
@@ -83,7 +88,10 @@ def fetch_json(url, ttl=8):
         data = json.load(resp)
 
     with _cache_lock:
-        _cache[url] = (now, data)
+        _cache[url] = (time.monotonic() + ttl, data)
+        _cache.move_to_end(url)
+        while len(_cache) > _CACHE_MAX:
+            _cache.popitem(last=False)
     return data
 
 
