@@ -21,7 +21,13 @@ npm install
 npm run dev      # opens on http://localhost:5173
 ```
 
-The API checks nflverse for new play-by-play on startup and Tuesdays at 9:00 AM Pacific,
+For the hosted site, GitHub Actions trains and publishes the model on Tuesdays
+at 9:00 AM Pacific; Render auto-deploys the resulting commit. Your computer
+does not need to stay on. You can trigger **Actions > Refresh NFL model > Run
+workflow** in GitHub for an immediate update. Render's Auto-Deploy setting
+must be **On Commit** for `main`.
+
+Locally, the API checks nflverse on startup and Tuesdays at 9:00 AM Pacific,
 then rebuilds the model and Season scorecard in the background. No data API
 key is required. For an immediate complete update, run this from the repo root:
 

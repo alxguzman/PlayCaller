@@ -12,7 +12,7 @@ services:
     # when the blueprint is applied and stores it server-side only.
     envVars:
       # Full training needs more memory than the free web instance offers.
-      # Refresh locally and deploy the model, or enable on a larger instance.
+      # GitHub Actions trains and commits the weekly model for auto-deployment.
       - key: NFL_DATA_REFRESH_ENABLED
         value: "0"
       - key: ANTHROPIC_API_KEY

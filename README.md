@@ -155,6 +155,38 @@ pip install -r requirements.txt
 
 ### 2. Current NFL data (automatic API sync)
 
+**Hosted model updates are automated:** [Refresh NFL model](https://github.com/alxguzman/PlayCaller/actions/workflows/refresh-model.yml)
+runs on GitHub Actions every Tuesday at **9:00 AM Pacific**, even when your
+computer is off. It downloads the current data on a separate runner, runs the
+regression tests, trains and validates the models, verifies API inference, then
+commits only `model/play_success_model.joblib` and `model/season_scorecard.json`
+to `main`. Render must have **Settings > Auto-Deploy > On Commit** enabled for
+the connected `main` branch to deploy that commit automatically. No training
+runs inside the Render web service, and ESPN live polling stays independent.
+
+You can also open **GitHub > Actions > Refresh NFL model > Run workflow** for
+an immediate cloud update. No new secrets are needed: the workflow uses its
+repository-scoped GitHub token, and it never calls the paid Claude API. The job
+has write permission only to publish repository contents. Existing branch
+protection can block direct bot pushes; a failed run reports that rather than
+bypassing protection or force-pushing. A concurrent push to `main` can also
+reject publication; rerun the workflow to train against the new source.
+
+This weekly job starts with a fresh data cache and retrains each run. Failed
+downloads, tests, training validation, or inference checks stop publication,
+leaving Render's deployed model in place. GitHub schedules can be delayed;
+check the workflow's run status and summary for the actual completion time.
+On public repositories GitHub can disable scheduled workflows after 60 days
+without repository activity. Local model refreshes still do **not** auto-push.
+After the bot publishes, use `git pull --ff-only` locally before more work
+(commit any local changes first).
+
+The `/data/status` training timestamp and data coverage show the loaded model.
+Its `refresh_enabled: false` on Render describes the in-process worker only;
+it does not disable this GitHub Actions workflow.
+
+**Local development:**
+
 The backend checks the public **nflverse GitHub Releases API** at startup
 and every Tuesday at **9:00 AM Pacific** (`America/Los_Angeles`) while running. No API key is needed. It discovers
 published seasons from 2023 through the current NFL season, downloads only
@@ -221,10 +253,10 @@ historical tuning comparison: `python -m src.model.tune_epa`.
 and train XGBoost. The existing free Render configuration disables background
 training (`NFL_DATA_REFRESH_ENABLED=0`). Docker images also default to no training,
 and Render is detected even when the service does not use the Blueprint.
-Refresh locally, then deploy the updated
-`model/play_success_model.joblib` and `model/season_scorecard.json`, or enable
-automatic refresh on a larger server. The API must remain running for periodic
-checks; an external scheduler can also run the complete update command.
+The GitHub Actions workflow above handles weekly training and publishing.
+You can also refresh locally and commit/push the updated model and scorecard.
+The local API must remain running for its own Tuesday checks; the cloud
+workflow does not depend on the API or your computer being online.
 
 If Render reports an out-of-memory restart, first check the service's
 Environment page: set `NFL_DATA_REFRESH_ENABLED=0` and choose **Save and deploy**.

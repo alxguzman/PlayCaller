@@ -75,9 +75,15 @@ def refresh_lock():
 
 
 def release_assets(tag):
+    headers = {"User-Agent": "PlayCaller", "Accept": "application/vnd.github+json"}
+    # Hosted CI shares public IPs. Authenticate metadata requests to avoid
+    # the low anonymous GitHub API limit; never pass this to asset downloads.
+    token = os.environ.get("NFLVERSE_GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(
         API_URL.format(tag=tag),
-        headers={"User-Agent": "PlayCaller", "Accept": "application/vnd.github+json"},
+        headers=headers,
     )
     with urllib.request.urlopen(request, timeout=60) as response:
         release = json.load(response)

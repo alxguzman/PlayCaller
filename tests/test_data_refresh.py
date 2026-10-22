@@ -45,6 +45,17 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(dest.read_bytes(), b"old data")
         self.assertFalse(Path(str(dest) + ".part").exists())
 
+    def test_ci_token_is_only_sent_to_metadata_api(self):
+        with patch.dict("os.environ", {"NFLVERSE_GITHUB_TOKEN": "test-token"}):
+            with patch.object(refresh.urllib.request, "urlopen", return_value=io.BytesIO(b'{"assets": []}')) as fetch:
+                self.assertEqual(refresh.release_assets("pbp"), {})
+                request = fetch.call_args.args[0]
+                self.assertEqual(request.host, "api.github.com")
+                self.assertEqual(request.get_header("Authorization"), "Bearer test-token")
+            with patch.object(refresh.urllib.request, "urlopen", return_value=io.BytesIO(b"csv")) as fetch:
+                refresh.download("https://github.com/nflverse/nflverse-data/releases/download/pbp/test.csv", self.root / "test.csv", 3)
+                self.assertIsNone(fetch.call_args.args[0].get_header("Authorization"))
+
     def test_changed_assets_download_and_unchanged_assets_are_cached(self):
         asset = {
             "name": "play_by_play_2026.csv.gz", "id": 1,
