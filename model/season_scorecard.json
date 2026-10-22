@@ -1,69 +1,69 @@
 {
  "season": 2026,
- "generated_at": "2026-10-21",
+ "generated_at": "2026-10-22",
  "weeks": [
   {
    "week": 1,
    "plays": 1755,
-   "agreement": 0.298,
-   "agreed_epa": 0.1411,
-   "other_epa": 0.042,
-   "agreed_success": 0.5143,
-   "other_success": 0.4318
+   "agreement": 0.2969,
+   "agreed_epa": 0.1492,
+   "other_epa": 0.0388,
+   "agreed_success": 0.524,
+   "other_success": 0.4279
   },
   {
    "week": 2,
    "plays": 1771,
-   "agreement": 0.2891,
-   "agreed_epa": 0.2812,
-   "other_epa": -0.0371,
-   "agreed_success": 0.5156,
-   "other_success": 0.413
+   "agreement": 0.2394,
+   "agreed_epa": 0.1945,
+   "other_epa": 0.011,
+   "agreed_success": 0.4953,
+   "other_success": 0.4261
   },
   {
    "week": 3,
    "plays": 1868,
-   "agreement": 0.2875,
-   "agreed_epa": 0.1464,
-   "other_epa": 0.0378,
-   "agreed_success": 0.5326,
-   "other_success": 0.4245
+   "agreement": 0.273,
+   "agreed_epa": 0.1174,
+   "other_epa": 0.0509,
+   "agreed_success": 0.5235,
+   "other_success": 0.43
   },
   {
    "week": 4,
    "plays": 1854,
-   "agreement": 0.301,
-   "agreed_epa": 0.0713,
-   "other_epa": 0.097,
-   "agreed_success": 0.5036,
-   "other_success": 0.4282
+   "agreement": 0.2794,
+   "agreed_epa": 0.1334,
+   "other_epa": 0.0722,
+   "agreed_success": 0.5174,
+   "other_success": 0.4251
   },
   {
    "week": 5,
    "plays": 1721,
-   "agreement": 0.3167,
-   "agreed_epa": 0.1771,
-   "other_epa": -0.0123,
-   "agreed_success": 0.5138,
-   "other_success": 0.3997
+   "agreement": 0.276,
+   "agreed_epa": 0.178,
+   "other_epa": -0.002,
+   "agreed_success": 0.5368,
+   "other_success": 0.3973
   },
   {
    "week": 6,
    "plays": 1661,
-   "agreement": 0.3245,
-   "agreed_epa": 0.068,
-   "other_epa": -0.0152,
-   "agreed_success": 0.4917,
-   "other_success": 0.4082
+   "agreement": 0.2908,
+   "agreed_epa": 0.0948,
+   "other_epa": -0.0223,
+   "agreed_success": 0.5052,
+   "other_success": 0.4066
   }
  ],
  "totals": {
   "week": "season",
   "plays": 10630,
-  "agreement": 0.3024,
-  "agreed_epa": 0.146,
-  "other_epa": 0.0202,
-  "agreed_success": 0.5118,
-  "other_success": 0.418
+  "agreement": 0.2757,
+  "agreed_epa": 0.1431,
+  "other_epa": 0.0259,
+  "agreed_success": 0.5176,
+  "other_success": 0.4193
  }
 }
