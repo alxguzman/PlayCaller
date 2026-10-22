@@ -1,10 +1,17 @@
+import { useState } from "react";
 import { conceptLabel, conceptType, epa, pct } from "../lib/labels.js";
 
 /**
  * The right panel: every play concept the model scored, sorted by
  * expected EPA, with the floor-and-ceiling logic made visible.
  */
-export default function CallSheet({ rec, floorGap }) {
+export default function CallSheet({ rec, floorGap, compact = false }) {
+  const [expanded, setExpanded] = useState(false);
+  const ranking = rec?.ranking ?? [];
+  // Keep the selected play visible even when the safety floor puts it below fourth.
+  const shown = compact && !expanded
+    ? ranking.filter((p, index) => index < 4 || p.play_concept === rec.best_call)
+    : ranking;
   return (
     <aside className="panel callsheet">
       <h2 className="panel-title">Call Sheet</h2>
@@ -15,7 +22,7 @@ export default function CallSheet({ rec, floorGap }) {
       </p>
       {!rec && <p className="muted">Waiting for the model…</p>}
       <ol className="callsheet-list">
-        {rec?.ranking.map((p) => {
+        {shown.map((p) => {
           const type = conceptType(p.play_concept);
           const isPick = p.play_concept === rec.best_call;
           return (
@@ -44,6 +51,11 @@ export default function CallSheet({ rec, floorGap }) {
           );
         })}
       </ol>
+      {compact && ranking.length > 4 && (
+        <button className="mobile-button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Show fewer plays" : `Show all ${ranking.length} plays`}
+        </button>
+      )}
       {rec && (
         <div className="sheet-footer">
           <span>EPA</span>

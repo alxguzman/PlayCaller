@@ -2,6 +2,10 @@ import { fieldPositionLabel, formationLabel, personnelLabel } from "../lib/label
 
 const DOWN_LABELS = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th" };
 
+function Advanced({ mobile, title, children }) {
+  return mobile ? <details className="mobile-advanced"><summary>{title}</summary>{children}</details> : children;
+}
+
 function Row({ label, children }) {
   return (
     <label className="row">
@@ -15,7 +19,7 @@ function Row({ label, children }) {
  * The left panel: every input the /recommend endpoint accepts, plus the
  * scoreboard fields it's derived from.
  */
-export default function SituationPanel({ situation: s, options, onChange, onReset, onRandomize }) {
+export default function SituationPanel({ situation: s, options, onChange, onReset, onRandomize, mobile = false }) {
   const teams = options?.teams ?? [s.posteam, s.defteam];
   const num = (key, lo, hi) => (e) => {
     const v = Number(e.target.value);
@@ -82,9 +86,9 @@ export default function SituationPanel({ situation: s, options, onChange, onRese
 
       <Row label="Score">
         <div className="score-inputs">
-          <input type="number" min="0" max="99" value={s.offScore} onChange={num("offScore", 0, 99)} />
+          <input aria-label={`${s.posteam} offense score`} type="number" min="0" max="99" value={s.offScore} onChange={num("offScore", 0, 99)} />
           <span className="score-sep">{s.posteam} – {s.defteam}</span>
-          <input type="number" min="0" max="99" value={s.defScore} onChange={num("defScore", 0, 99)} />
+          <input aria-label={`${s.defteam} defense score`} type="number" min="0" max="99" value={s.defScore} onChange={num("defScore", 0, 99)} />
         </div>
       </Row>
 
@@ -115,7 +119,8 @@ export default function SituationPanel({ situation: s, options, onChange, onRese
         />
       </Row>
 
-      <h2 className="panel-title">Offensive Look</h2>
+      <Advanced mobile={mobile} title="Formation & personnel">
+      {!mobile && <h2 className="panel-title">Offensive Look</h2>}
 
       <Row label="Formation">
         <select value={s.formation} onChange={(e) => onChange({ formation: e.target.value })}>
@@ -150,6 +155,8 @@ export default function SituationPanel({ situation: s, options, onChange, onRese
           ))}
         </select>
       </Row>
+      </Advanced>
+      <Advanced mobile={mobile} title="Risk settings">
       <Row label={`Risk dial · ${s.success_floor_gap.toFixed(2)}`}>
         <input
           type="range"
@@ -165,6 +172,7 @@ export default function SituationPanel({ situation: s, options, onChange, onRese
         <span>chase upside</span>
       </div>
 
+      </Advanced>
       <div className="panel-actions">
         <button className="randomize-btn" onClick={onRandomize}>
           🎲 Randomize

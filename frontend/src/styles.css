@@ -1303,3 +1303,81 @@ input[type="range"] {
 .season-table-wrap {
   overflow-x: auto;
 }
+
+/* Mobile presentation only: desktop panels and navigation retain their layout. */
+@media (max-width: 860px) {
+  .app { padding: 0 12px calc(88px + env(safe-area-inset-bottom)); }
+  .header { min-height: 64px; margin-bottom: 12px; gap: 12px; }
+  .brand-name { font-size: 17px; letter-spacing: 0.04em; }
+  .header .nav {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    background: var(--panel); border-top: 1px solid var(--border);
+    padding: 6px 8px calc(8px + env(safe-area-inset-bottom)); gap: 4px;
+  }
+  .header .nav-tab { min-height: 48px; padding: 8px 2px; font-size: 11px; letter-spacing: 0.02em; }
+  .mobile-dashboard { display: grid; gap: 12px; min-width: 0; }
+  .mobile-dashboard > *, .live-layout > * { min-width: 0; }
+  .panel { padding: 14px; }
+  .mobile-matchup { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mobile-matchup span { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 14px; }
+  .mobile-situation h2 { margin: 14px 0 6px; font-size: 23px; }
+  .mobile-situation p { color: var(--muted); margin: 0 0 14px; font-family: var(--mono); font-size: 13px; }
+  .mobile-button {
+    min-height: 44px; width: 100%; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button:focus-visible, summary:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+  .mobile-button.primary { background: var(--green); color: #05140b; border-color: var(--green); }
+  .rec-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+  .rec-main { grid-column: 1 / -1; }
+  .rec-call { font-size: clamp(28px, 8vw, 42px); overflow-wrap: anywhere; }
+  .stat-big { font-size: 30px; }
+  .rec-ring { justify-self: center; }
+  .save-btn, .coach-btn, .clear-btn, .live-game, .reset-btn { min-height: 44px; }
+  .field-legend { flex-wrap: wrap; gap: 8px; }
+  .mobile-disclosure { padding: 0 14px; }
+  .mobile-disclosure > summary, .mobile-advanced > summary {
+    min-height: 48px; padding: 14px 0; cursor: pointer; font-weight: 600;
+  }
+  .mobile-disclosure > .panel { border: 0; padding: 0 0 14px; overflow-x: auto; }
+  .mobile-disclosure .history { margin-top: 0; padding-bottom: 14px; }
+  .mobile-disclosure .history-cards { flex-direction: column; }
+  .mobile-team-form h2 { font-size: 20px; margin: 8px 0 12px; }
+  .mobile-team-toggle { margin-bottom: 10px; }
+  .mobile-team-toggle button { flex: 1; min-height: 44px; font-size: 14px; }
+  .sheet-row { grid-template-columns: auto minmax(0, 1fr) 48px 40px; min-height: 48px; padding: 10px 2px; }
+  .sheet-bars { display: none; }
+  .sheet-name { white-space: normal; overflow-wrap: anywhere; }
+  .callsheet .mobile-button { margin-top: 12px; }
+  .callsheet-list { max-height: none; }
+  .situation-sheet {
+    position: fixed; inset: auto 0 0; margin: 0 auto; width: 100%; max-width: 600px;
+    max-height: 90dvh; height: 90dvh; padding: 0; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 18px 18px 0 0;
+  }
+  .situation-sheet[open] { display: flex; flex-direction: column; }
+  .situation-sheet::backdrop { background: rgba(0, 0, 0, 0.7); }
+  .sheet-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .sheet-heading h2 { font-size: 22px; margin: 0; }
+  .sheet-heading button { width: 44px; flex-shrink: 0; }
+  .sheet-scroll { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+  .sheet-scroll .sidebar { border: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 12px; }
+  .sheet-scroll .sidebar > * { grid-column: 1 / -1; min-width: 0; }
+  .sheet-scroll .sidebar > .row:nth-child(2), .sheet-scroll .sidebar > .row:nth-child(3) { grid-column: auto; }
+  .sheet-apply { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); }
+  .sheet-heading, .sheet-apply { flex-shrink: 0; }
+  .situation-sheet .row { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 0; }
+  .situation-sheet .row-control { justify-content: stretch; min-width: 0; }
+  .situation-sheet select, .situation-sheet input { max-width: none; min-height: 44px; font-size: 16px; }
+  .situation-sheet .segmented, .situation-sheet .score-inputs { width: 100%; }
+  .situation-sheet .segmented button { flex: 1; min-height: 44px; }
+  .situation-sheet .score-inputs input { min-width: 0; }
+  .mobile-advanced { border-top: 1px solid var(--border); margin-top: 12px; }
+  .live-layout { grid-template-columns: minmax(0, 1fr); }
+  .live-stat-row { flex-wrap: wrap; }
+  .live-stat { min-width: 0; }
+  .live-score { font-size: 30px; }
+  .api-banner { flex-wrap: wrap; overflow-wrap: anywhere; }
+}

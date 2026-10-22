@@ -17,6 +17,7 @@ import RankPanel from "./components/RankPanel.jsx";
 import HistoryStrip from "./components/HistoryStrip.jsx";
 import LiveView from "./components/LiveView.jsx";
 import SeasonView from "./components/SeasonView.jsx";
+import MobileDashboard from "./components/MobileDashboard.jsx";
 
 /** Build the three Overall/Pass/Run rows a RankPanel renders. */
 function rankRows(ranks, isOffense = false) {
@@ -114,6 +115,13 @@ function loadHistory() {
 }
 
 export default function App() {
+  const [mobile, setMobile] = useState(() => window.matchMedia("(max-width: 860px)").matches);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 860px)");
+    const change = () => setMobile(query.matches);
+    query.addEventListener("change", change);
+    return () => query.removeEventListener("change", change);
+  }, []);
   const [view, setView] = useState("sim"); // "sim" | "live" | "season"
   const [liveNow, setLiveNow] = useState(false); // any game in progress?
   const [situation, setSituation] = useState(DEFAULT_SITUATION);
@@ -250,6 +258,10 @@ export default function App() {
           <button onClick={loadOptions}>Retry</button>
         </div>
       )}
+      {mobile ? <MobileDashboard situation={situation} options={options} rec={rec} loading={loading}
+        onSave={saveToHistory} onApply={setSituation} defaults={DEFAULT_SITUATION} randomize={randomSituation}
+        request={toRequest(situation)} formation={fieldFormation} personnel={fieldPersonnel} box={fieldBox}
+        offense={offense} defense={defense} rankRows={rankRows} history={history} onClearHistory={clearHistory} /> : <>
       <main className="layout">
         <SituationPanel
           situation={situation}
@@ -298,6 +310,7 @@ export default function App() {
         </section>
       </main>
       <HistoryStrip history={history} onClear={clearHistory} />
+      </>}
     </div>
   );
 }
