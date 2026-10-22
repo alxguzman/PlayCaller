@@ -19,12 +19,12 @@ import LiveView from "./components/LiveView.jsx";
 import SeasonView from "./components/SeasonView.jsx";
 
 /** Build the three Overall/Pass/Run rows a RankPanel renders. */
-function rankRows(ranks) {
+function rankRows(ranks, isOffense = false) {
   if (!ranks) return null;
   return [
     { label: "Overall", rank: ranks.overall_rank, epa: ranks.overall_epa },
-    { label: "vs Pass", rank: ranks.pass_rank, epa: ranks.pass_epa },
-    { label: "vs Run", rank: ranks.run_rank, epa: ranks.run_epa },
+    { label: isOffense ? "Pass" : "vs Pass", rank: ranks.pass_rank, epa: ranks.pass_epa },
+    { label: isOffense ? "Run" : "vs Run", rank: ranks.run_rank, epa: ranks.run_epa },
   ];
 }
 
@@ -281,7 +281,7 @@ export default function App() {
           <CallSheet rec={rec} floorGap={situation.success_floor_gap} />
           <RankPanel
             title={`${situation.posteam} Offense · last 4 weeks`}
-            rows={rankRows(offense?.ranks?.[situation.posteam])}
+            rows={rankRows(offense?.ranks?.[situation.posteam], true)}
             nTeams={offense?.n_teams ?? 32}
             epaSuffix="EPA/play"
             hint="League rank by EPA per play (1 = best). Rolling average of the offense's previous 4 games — higher is better."

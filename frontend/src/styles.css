@@ -803,6 +803,31 @@ input[type="range"] {
 
 /* ---- responsive ------------------------------------------------------ */
 
+@media (min-width: 1181px) {
+  .right-col {
+    /* Reserve room for the header and bottom margin; rankings keep their height. */
+    height: calc(100dvh - 92px);
+    display: grid;
+    grid-template-rows: minmax(140px, 1fr) auto auto;
+  }
+
+  .right-col .callsheet {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .right-col .callsheet-list {
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  .right-col .callsheet > :not(.callsheet-list) {
+    flex-shrink: 0;
+  }
+}
+
 @media (max-width: 1180px) {
   .layout {
     grid-template-columns: 270px minmax(0, 1fr);
