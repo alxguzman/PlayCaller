@@ -1,69 +1,78 @@
 {
  "season": 2026,
- "generated_at": "2026-10-22",
+ "generated_at": "2026-10-27",
  "weeks": [
   {
    "week": 1,
    "plays": 1755,
-   "agreement": 0.2969,
-   "agreed_epa": 0.1492,
-   "other_epa": 0.0388,
-   "agreed_success": 0.524,
-   "other_success": 0.4279
+   "agreement": 0.2895,
+   "agreed_epa": 0.1057,
+   "other_epa": 0.0577,
+   "agreed_success": 0.5039,
+   "other_success": 0.437
   },
   {
    "week": 2,
    "plays": 1771,
-   "agreement": 0.2394,
-   "agreed_epa": 0.1945,
-   "other_epa": 0.011,
-   "agreed_success": 0.4953,
-   "other_success": 0.4261
+   "agreement": 0.2552,
+   "agreed_epa": 0.1865,
+   "other_epa": 0.0099,
+   "agreed_success": 0.5088,
+   "other_success": 0.42
   },
   {
    "week": 3,
    "plays": 1868,
-   "agreement": 0.273,
-   "agreed_epa": 0.1174,
-   "other_epa": 0.0509,
-   "agreed_success": 0.5235,
-   "other_success": 0.43
+   "agreement": 0.265,
+   "agreed_epa": 0.1247,
+   "other_epa": 0.049,
+   "agreed_success": 0.5152,
+   "other_success": 0.4341
   },
   {
    "week": 4,
    "plays": 1854,
-   "agreement": 0.2794,
-   "agreed_epa": 0.1334,
-   "other_epa": 0.0722,
-   "agreed_success": 0.5174,
-   "other_success": 0.4251
+   "agreement": 0.2745,
+   "agreed_epa": 0.1223,
+   "other_epa": 0.0768,
+   "agreed_success": 0.5187,
+   "other_success": 0.4253
   },
   {
    "week": 5,
    "plays": 1721,
-   "agreement": 0.276,
-   "agreed_epa": 0.178,
-   "other_epa": -0.002,
-   "agreed_success": 0.5368,
-   "other_success": 0.3973
+   "agreement": 0.2899,
+   "agreed_epa": 0.1884,
+   "other_epa": -0.0098,
+   "agreed_success": 0.5391,
+   "other_success": 0.3936
   },
   {
    "week": 6,
    "plays": 1661,
-   "agreement": 0.2908,
-   "agreed_epa": 0.0948,
-   "other_epa": -0.0223,
-   "agreed_success": 0.5052,
-   "other_success": 0.4066
+   "agreement": 0.2968,
+   "agreed_epa": 0.1071,
+   "other_epa": -0.0285,
+   "agreed_success": 0.5112,
+   "other_success": 0.4033
+  },
+  {
+   "week": 7,
+   "plays": 1599,
+   "agreement": 0.267,
+   "agreed_epa": 0.1688,
+   "other_epa": 0.0848,
+   "agreed_success": 0.5105,
+   "other_success": 0.4386
   }
  ],
  "totals": {
   "week": "season",
-  "plays": 10630,
-  "agreement": 0.2757,
-  "agreed_epa": 0.1431,
-  "other_epa": 0.0259,
-  "agreed_success": 0.5176,
-  "other_success": 0.4193
+  "plays": 12229,
+  "agreement": 0.2766,
+  "agreed_epa": 0.1421,
+  "other_epa": 0.035,
+  "agreed_success": 0.5155,
+  "other_success": 0.422
  }
 }
